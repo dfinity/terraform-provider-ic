@@ -35,8 +35,9 @@ type CanisterResource struct {
 
 // CanisterResourceModel describes the resource data model.
 type CanisterResourceModel struct {
-	Id         types.String `tfsdk:"id"`
-	ModuleHash types.String `tfsdk:"module_hash"`
+	Id          types.String   `tfsdk:"id"`
+	ModuleHash  types.String   `tfsdk:"module_hash"`
+	Controllers []types.String `tfsdk:"controllers"`
 }
 
 func (r *CanisterResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -62,6 +63,11 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"controllers": schema.ListAttribute{
+				ElementType:         types.StringType,
+				Computed:            true,
+				MarkdownDescription: "Canister controllers",
 			},
 		},
 	}
@@ -150,4 +156,21 @@ func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportS
 	}
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("module_hash"), moduleHashString)...)
+
+	tflog.Info(ctx, "Reading canister controllers for "+principal.String())
+	controllers, err := agent.GetCanisterControllers(principal)
+	if err != nil {
+		tflog.Error(ctx, "Cannot get canister controllers")
+		return
+	}
+
+	controller_principals := make([]string, len(controllers))
+	tflog.Info(ctx, "Decoding controller principals")
+	for i := 0; i < len(controllers); i++ {
+		controller_principals[i] = controllers[i].Encode()
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("controllers"),
+		controller_principals)...)
+
 }
