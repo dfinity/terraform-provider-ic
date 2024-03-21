@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/url"
+	"os/exec"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -66,8 +68,12 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"controllers": schema.ListAttribute{
 				ElementType:         types.StringType,
-				Computed:            true,
 				MarkdownDescription: "Canister controllers",
+
+				/* the controllers can either be fetched from the replica, or
+				   set directly if necessary */
+				Computed: true,
+				Optional: true,
 			},
 		},
 	}
@@ -94,6 +100,29 @@ func (r *CanisterResource) Configure(ctx context.Context, req resource.Configure
 }
 
 func (r *CanisterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+
+	agent, err := localhostAgent()
+	if err != nil {
+		resp.Diagnostics.AddError("Agent error", "Cannot set up agent: "+err.Error())
+		return
+	}
+
+	managementCanister, err := principal.Decode("aaaaa-aa")
+	if err != nil {
+		resp.Diagnostics.AddError("Unexpected Error", "Cannot decode: "+err.Error())
+		return
+	}
+
+	var result string
+	var provisionalCreateCanisterArgument struct{}
+	err = agent.Call(managementCanister, "provisional_create_canister_with_cycles",
+		[]any{provisionalCreateCanisterArgument},
+		[]any{&result})
+	if err != nil {
+		resp.Diagnostics.AddError("Unexpected Error", "Cannot create canister: "+err.Error())
+		return
+	}
+
 	resp.Diagnostics.AddError("Client Error", "Creating canisters is not supported yet")
 	return
 }
@@ -113,9 +142,146 @@ func (r *CanisterResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
+/*
+From the IC management canister:
+
+	type canister_settings = record {
+	    controllers : opt vec principal;
+	    compute_allocation : opt nat;
+	    memory_allocation : opt nat;
+	    freezing_threshold : opt nat;
+	    reserved_cycles_limit : opt nat;
+	};
+*/
+type CanisterSettings struct {
+	Controllers *[]principal.Principal `ic:"controllers" json:"controllers"`
+}
+
+/*
+From the IC management canister:
+
+	type update_settings_args = record {
+	    canister_id : principal;
+	    settings : canister_settings;
+	    sender_canister_version : opt nat64;
+	};
+*/
+type UpdateSettingsArgs struct {
+	CanisterId principal.Principal `ic:"canister_id" json:"canister_id"`
+	Settings   CanisterSettings    `ic:"settings" json:"settings"`
+}
+
+// An agent for local development
+func localhostAgent() (*agent.Agent, error) {
+	u, _ := url.Parse("http://localhost:4943")
+	config := agent.Config{
+		ClientConfig: &agent.ClientConfig{Host: u},
+		FetchRootKey: true,
+	}
+
+	agent, err := agent.New(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return agent, nil
+}
+
+// XXX: this is NOT atomic
 func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Client Error", "Updating canisters is not supported yet")
+	var data CanisterResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	tflog.Info(ctx, fmt.Sprintf("Updating to new data: %s", data))
+
+	canisterId := data.Id.ValueString()
+	controllers := make([]string, len(data.Controllers))
+	for i := 0; i < len(data.Controllers); i++ {
+		controllers[i] = data.Controllers[i].ValueString()
+	}
+
+	err := setCanisterControllers(canisterId, controllers)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not update canister: "+err.Error())
+		return
+	}
+
+	// Save updated data into Terraform state
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+
+	tflog.Info(ctx, "Done updating canister")
 	return
+}
+
+func setCanisterControllers(canisterId string, controllers []string) error {
+	/* XXX: this is the "correct" way of doing things by using
+	        agent-go, but agent-go has a bug that prevents it from
+	        calling to the management canister
+
+			agent, err := localhostAgent()
+			if err != nil {
+				resp.Diagnostics.AddError("Agent error", "Cannot set up agent: "+err.Error())
+				return
+			}
+
+			canisterId, err := principal.Decode(data.Id.ValueString())
+			if err != nil {
+				tflog.Error(ctx, "Cannot decode canister ID: "+err.Error())
+				return
+			}
+
+			controllers := make([]principal.Principal, len(data.Controllers))
+			for i := 0; i < len(data.Controllers); i++ {
+				controller, err := principal.Decode(data.Controllers[i].ValueString())
+				if err != nil {
+					tflog.Error(ctx, "Cannot decode controller principal: "+err.Error())
+					return
+				}
+				controllers[i] = controller
+			}
+
+			canisterSettings := CanisterSettings{
+				Controllers: &controllers,
+			}
+
+			updateSettingsArgs := UpdateSettingsArgs{
+				CanisterId: canisterId,
+				Settings:   canisterSettings,
+			}
+
+			tflog.Info(ctx, fmt.Sprintf("Updating canister settings: %s", updateSettingsArgs))
+
+			icManagementCanisterCanisterId, _ := principal.Decode("aaaaa-aa")
+			err = agent.Call(icManagementCanisterCanisterId, "update_settings", []any{updateSettingsArgs}, nil)
+			if err != nil {
+				tflog.Error(ctx, "Could not update canister: "+err.Error())
+				resp.Diagnostics.AddError("Client Error", "Could not update canister: "+err.Error())
+				return
+			}
+	*/
+
+	// XXX: workaround: use dfx
+
+	setControllerArgs := make([]string, 2*len(controllers))
+	for i := 0; i < len(controllers); i++ {
+		setControllerArgs[2*i] = "--set-controller"
+		setControllerArgs[2*i+1] = controllers[i]
+	}
+
+	var args []string
+	args = append(args, "canister")
+	args = append(args, "update-settings")
+	args = append(args, canisterId)
+	args = append(args, setControllerArgs...)
+
+	cmd := exec.Command("dfx", args...)
+
+	err := cmd.Run()
+
+	return err
+
 }
 
 func (r *CanisterResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -134,10 +300,9 @@ func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportS
 		return
 	}
 
-	// NOTE: This calls mainnet
-	agent, err := agent.New(agent.DefaultConfig)
+	agent, err := localhostAgent()
 	if err != nil {
-		tflog.Error(ctx, "Cannot set up agent: "+err.Error())
+		resp.Diagnostics.AddError("Agent error", "Cannot set up agent: "+err.Error())
 		return
 	}
 
