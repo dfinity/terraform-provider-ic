@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
-	"os/exec"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -19,6 +18,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/aviate-labs/agent-go"
+	"github.com/aviate-labs/agent-go/ic"
+	icMgmt "github.com/aviate-labs/agent-go/ic/ic"
 	"github.com/aviate-labs/agent-go/principal"
 )
 
@@ -142,42 +143,20 @@ func (r *CanisterResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-/*
-From the IC management canister:
+func localhostConfig() agent.Config {
 
-	type canister_settings = record {
-	    controllers : opt vec principal;
-	    compute_allocation : opt nat;
-	    memory_allocation : opt nat;
-	    freezing_threshold : opt nat;
-	    reserved_cycles_limit : opt nat;
-	};
-*/
-type CanisterSettings struct {
-	Controllers *[]principal.Principal `ic:"controllers" json:"controllers"`
-}
-
-/*
-From the IC management canister:
-
-	type update_settings_args = record {
-	    canister_id : principal;
-	    settings : canister_settings;
-	    sender_canister_version : opt nat64;
-	};
-*/
-type UpdateSettingsArgs struct {
-	CanisterId principal.Principal `ic:"canister_id" json:"canister_id"`
-	Settings   CanisterSettings    `ic:"settings" json:"settings"`
-}
-
-// An agent for local development
-func localhostAgent() (*agent.Agent, error) {
 	u, _ := url.Parse("http://localhost:4943")
 	config := agent.Config{
 		ClientConfig: &agent.ClientConfig{Host: u},
 		FetchRootKey: true,
 	}
+
+	return config
+}
+
+// An agent for local development
+func localhostAgent() (*agent.Agent, error) {
+	config := localhostConfig()
 
 	agent, err := agent.New(config)
 	if err != nil {
@@ -216,72 +195,42 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 }
 
 func setCanisterControllers(canisterId string, controllers []string) error {
-	/* XXX: this is the "correct" way of doing things by using
-	        agent-go, but agent-go has a bug that prevents it from
-	        calling to the management canister
 
-			agent, err := localhostAgent()
-			if err != nil {
-				resp.Diagnostics.AddError("Agent error", "Cannot set up agent: "+err.Error())
-				return
-			}
-
-			canisterId, err := principal.Decode(data.Id.ValueString())
-			if err != nil {
-				tflog.Error(ctx, "Cannot decode canister ID: "+err.Error())
-				return
-			}
-
-			controllers := make([]principal.Principal, len(data.Controllers))
-			for i := 0; i < len(data.Controllers); i++ {
-				controller, err := principal.Decode(data.Controllers[i].ValueString())
-				if err != nil {
-					tflog.Error(ctx, "Cannot decode controller principal: "+err.Error())
-					return
-				}
-				controllers[i] = controller
-			}
-
-			canisterSettings := CanisterSettings{
-				Controllers: &controllers,
-			}
-
-			updateSettingsArgs := UpdateSettingsArgs{
-				CanisterId: canisterId,
-				Settings:   canisterSettings,
-			}
-
-			tflog.Info(ctx, fmt.Sprintf("Updating canister settings: %s", updateSettingsArgs))
-
-			icManagementCanisterCanisterId, _ := principal.Decode("aaaaa-aa")
-			err = agent.Call(icManagementCanisterCanisterId, "update_settings", []any{updateSettingsArgs}, nil)
-			if err != nil {
-				tflog.Error(ctx, "Could not update canister: "+err.Error())
-				resp.Diagnostics.AddError("Client Error", "Could not update canister: "+err.Error())
-				return
-			}
-	*/
-
-	// XXX: workaround: use dfx
-
-	setControllerArgs := make([]string, 2*len(controllers))
-	for i := 0; i < len(controllers); i++ {
-		setControllerArgs[2*i] = "--set-controller"
-		setControllerArgs[2*i+1] = controllers[i]
+	cfg := localhostConfig()
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, cfg)
+	if err != nil {
+		return err
 	}
 
-	var args []string
-	args = append(args, "canister")
-	args = append(args, "update-settings")
-	args = append(args, canisterId)
-	args = append(args, setControllerArgs...)
+	canisterIdP, err := principal.Decode(canisterId)
+	if err != nil {
+		return err
+	}
 
-	cmd := exec.Command("dfx", args...)
+	controllersP := make([]principal.Principal, len(controllers))
+	for i := 0; i < len(controllers); i++ {
+		controller, err := principal.Decode(controllers[i])
+		if err != nil {
+			return err
+		}
+		controllersP[i] = controller
+	}
 
-	err := cmd.Run()
+	canisterSettings := icMgmt.CanisterSettings{
+		Controllers: &controllersP,
+	}
 
-	return err
+	updateSettingsArgs := icMgmt.UpdateSettingsArgs{
+		CanisterId: canisterIdP,
+		Settings:   canisterSettings,
+	}
 
+	err = agent.UpdateSettings(updateSettingsArgs)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *CanisterResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
