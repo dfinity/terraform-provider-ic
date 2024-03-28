@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
@@ -39,7 +38,7 @@ func NewCanisterResource() resource.Resource {
 
 // CanisterResource defines the resource implementation.
 type CanisterResource struct {
-	agent *agent.Agent
+	config *agent.Config
 }
 
 // CanisterResourceModel describes the resource data model.
@@ -128,7 +127,7 @@ func (r *CanisterResource) Configure(ctx context.Context, req resource.Configure
 		return
 	}
 
-	agent, ok := req.ProviderData.(*agent.Agent)
+	config, ok := req.ProviderData.(*agent.Config)
 
 	if !ok {
 		resp.Diagnostics.AddError(
@@ -139,32 +138,10 @@ func (r *CanisterResource) Configure(ctx context.Context, req resource.Configure
 		return
 	}
 
-	r.agent = agent
+	r.config = config
 }
 
 func (r *CanisterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-
-	agent, err := localhostAgent()
-	if err != nil {
-		resp.Diagnostics.AddError("Agent error", "Cannot set up agent: "+err.Error())
-		return
-	}
-
-	managementCanister, err := principal.Decode("aaaaa-aa")
-	if err != nil {
-		resp.Diagnostics.AddError("Unexpected Error", "Cannot decode: "+err.Error())
-		return
-	}
-
-	var result string
-	var provisionalCreateCanisterArgument struct{}
-	err = agent.Call(managementCanister, "provisional_create_canister_with_cycles",
-		[]any{provisionalCreateCanisterArgument},
-		[]any{&result})
-	if err != nil {
-		resp.Diagnostics.AddError("Unexpected Error", "Cannot create canister: "+err.Error())
-		return
-	}
 
 	resp.Diagnostics.AddError("Client Error", "Creating canisters is not supported yet")
 	return
@@ -185,29 +162,6 @@ func (r *CanisterResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func localhostConfig() agent.Config {
-
-	u, _ := url.Parse("http://localhost:4943")
-	config := agent.Config{
-		ClientConfig: &agent.ClientConfig{Host: u},
-		FetchRootKey: true,
-	}
-
-	return config
-}
-
-// An agent for local development
-func localhostAgent() (*agent.Agent, error) {
-	config := localhostConfig()
-
-	agent, err := agent.New(config)
-	if err != nil {
-		return nil, err
-	}
-
-	return agent, nil
-}
-
 // XXX: this is NOT atomic
 func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data CanisterResourceModel
@@ -226,7 +180,7 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 		controllers[i] = data.Controllers[i].ValueString()
 	}
 
-	err := setCanisterControllers(canisterId, controllers)
+	err := r.setCanisterControllers(canisterId, controllers)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
 		return
@@ -243,7 +197,7 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 	wasmFile := data.WasmFile.ValueString()
 	wasmSha256 := data.WasmSha256.ValueString()
 
-	err = setCanisterCode(canisterId, argHex, wasmFile, wasmSha256)
+	err = r.setCanisterCode(canisterId, argHex, wasmFile, wasmSha256)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
 		return
@@ -298,10 +252,9 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 
 }
 
-func setCanisterCode(canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
+func (r *CanisterResource) setCanisterCode(canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
 
-	cfg := localhostConfig()
-	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, cfg)
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
 	if err != nil {
 		return err
 	}
@@ -351,10 +304,9 @@ func setCanisterCode(canisterId string, argHex string, wasmFile string, wasmSha2
 	return nil
 }
 
-func setCanisterControllers(canisterId string, controllers []string) error {
+func (r *CanisterResource) setCanisterControllers(canisterId string, controllers []string) error {
 
-	cfg := localhostConfig()
-	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, cfg)
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
 	if err != nil {
 		return err
 	}
@@ -406,7 +358,7 @@ func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportS
 		return
 	}
 
-	agent, err := localhostAgent()
+	agent, err := agent.New(*r.config)
 	if err != nil {
 		resp.Diagnostics.AddError("Agent error", "Cannot set up agent: "+err.Error())
 		return

@@ -5,13 +5,13 @@ package provider
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/aviate-labs/agent-go"
 )
@@ -29,7 +29,17 @@ type IcProvider struct {
 }
 
 // IcProviderModel describes the provider data model.
-type IcProviderModel struct {
+type IcProviderModel struct{}
+
+func localhostConfig() agent.Config {
+
+	u, _ := url.Parse("http://localhost:4943")
+	config := agent.Config{
+		ClientConfig: &agent.ClientConfig{Host: u},
+		FetchRootKey: true,
+	}
+
+	return config
 }
 
 func (p *IcProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -49,19 +59,13 @@ func (p *IcProvider) Configure(ctx context.Context, req provider.ConfigureReques
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
+	config := localhostConfig()
+
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Configuration values are now available.
-
-	agent, err := agent.New(agent.DefaultConfig)
-	if err != nil {
-		tflog.Error(ctx, "Cannot set up agent: "+err.Error())
-		return
-	}
-
-	resp.DataSourceData = agent
+	resp.ResourceData = &config
 }
 
 func (p *IcProvider) Resources(ctx context.Context) []func() resource.Resource {
