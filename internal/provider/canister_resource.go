@@ -5,9 +5,12 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
+	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -41,6 +44,9 @@ type CanisterResourceModel struct {
 	Id          types.String   `tfsdk:"id"`
 	ModuleHash  types.String   `tfsdk:"module_hash"`
 	Controllers []types.String `tfsdk:"controllers"`
+	ArgHex      types.String   `tfsdk:"arg_hex"`     /* Hex-represented didc-encoded arguments */
+	WasmFile    types.String   `tfsdk:"wasm_file"`   /* path to Wasm module */
+	WasmSha256  types.String   `tfsdk:"wasm_sha256"` /* base64-encoded Wasm module */
 }
 
 func (r *CanisterResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -75,6 +81,22 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 				   set directly if necessary */
 				Computed: true,
 				Optional: true,
+			},
+			"arg_hex": schema.StringAttribute{
+				Required: true,
+
+				MarkdownDescription: "Hex representation of candid-encoded arguments",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"wasm_file": schema.StringAttribute{
+				Required:            true,
+				MarkdownDescription: "Path to Wasm module to install",
+			},
+			"wasm_sha256": schema.StringAttribute{
+				Required:            true,
+				MarkdownDescription: "Sha256 sum of Wasm module (hex encoded)",
 			},
 		},
 	}
@@ -176,6 +198,9 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 	tflog.Info(ctx, fmt.Sprintf("Updating to new data: %s", data))
 
 	canisterId := data.Id.ValueString()
+
+	/* Controllers */
+
 	controllers := make([]string, len(data.Controllers))
 	for i := 0; i < len(data.Controllers); i++ {
 		controllers[i] = data.Controllers[i].ValueString()
@@ -183,7 +208,19 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	err := setCanisterControllers(canisterId, controllers)
 	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Could not update canister: "+err.Error())
+		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
+		return
+	}
+
+	/* Code install & args */
+
+	argHex := data.ArgHex.ValueString()
+	wasmFile := data.WasmFile.ValueString()
+	wasmSha256 := data.WasmSha256.ValueString()
+
+	err = setCanisterCode(canisterId, argHex, wasmFile, wasmSha256)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
 		return
 	}
 
@@ -192,6 +229,59 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	tflog.Info(ctx, "Done updating canister")
 	return
+}
+
+func setCanisterCode(canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
+
+	cfg := localhostConfig()
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, cfg)
+	if err != nil {
+		return err
+	}
+
+	canisterIdP, err := principal.Decode(canisterId)
+	if err != nil {
+		return err
+	}
+
+	wasmModule, err := os.ReadFile(wasmFile)
+	if err != nil {
+		return err
+	}
+
+	// Check sha256
+	computed := sha256.Sum256(wasmModule)
+	if wasmSha256 != hex.EncodeToString(computed[:]) {
+		return errors.New(fmt.Sprintf("Sha256 mismatch, expected %s, got %s", wasmSha256, computed))
+	}
+
+	skipPreUpgrade := false
+	update := struct {
+		SkipPreUpgrade *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
+	}{SkipPreUpgrade: &skipPreUpgrade}
+
+	ref := &update
+
+	argRaw, err := hex.DecodeString(argHex)
+	if err != nil {
+		return err
+	}
+
+	installCodeArgs := icMgmt.InstallCodeArgs{
+		Mode: icMgmt.CanisterInstallMode{
+			Upgrade: &ref,
+		},
+		CanisterId: canisterIdP,
+		WasmModule: wasmModule,
+		Arg:        argRaw,
+	}
+
+	err = agent.InstallCode(installCodeArgs)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func setCanisterControllers(canisterId string, controllers []string) error {
