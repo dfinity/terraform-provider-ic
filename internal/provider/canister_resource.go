@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -21,6 +22,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/aviate-labs/agent-go"
+	"github.com/aviate-labs/agent-go/candid/idl"
 	"github.com/aviate-labs/agent-go/ic"
 	icMgmt "github.com/aviate-labs/agent-go/ic/ic"
 	"github.com/aviate-labs/agent-go/principal"
@@ -29,6 +31,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &CanisterResource{}
 var _ resource.ResourceWithImportState = &CanisterResource{}
+var _ resource.ResourceWithConfigValidators = &CanisterResource{}
 
 func NewCanisterResource() resource.Resource {
 	return &CanisterResource{}
@@ -44,9 +47,21 @@ type CanisterResourceModel struct {
 	Id          types.String   `tfsdk:"id"`
 	ModuleHash  types.String   `tfsdk:"module_hash"`
 	Controllers []types.String `tfsdk:"controllers"`
+	Arg         types.Dynamic  `tfsdk:"arg"`
 	ArgHex      types.String   `tfsdk:"arg_hex"`     /* Hex-represented didc-encoded arguments */
 	WasmFile    types.String   `tfsdk:"wasm_file"`   /* path to Wasm module */
 	WasmSha256  types.String   `tfsdk:"wasm_sha256"` /* base64-encoded Wasm module */
+}
+
+func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		/* Exactly one of arg & arg_hex must be specified.
+		   XXX: we currently don't support _not_ setting an argument */
+		resourcevalidator.ExactlyOneOf(
+			path.MatchRoot("arg"),
+			path.MatchRoot("arg_hex"),
+		),
+	}
 }
 
 func (r *CanisterResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -82,8 +97,13 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 				Computed: true,
 				Optional: true,
 			},
+			"arg": schema.DynamicAttribute{
+				Optional: true,
+
+				MarkdownDescription: "Init & post_upgrade arguments for the canister. Heuristics are used to convert it to candid.",
+			},
 			"arg_hex": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 
 				MarkdownDescription: "Hex representation of candid-encoded arguments",
 				PlanModifiers: []planmodifier.String{
@@ -214,7 +234,12 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	/* Code install & args */
 
-	argHex := data.ArgHex.ValueString()
+	argHex, err := data.GetArgHex(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not read argument: "+err.Error())
+		return
+	}
+
 	wasmFile := data.WasmFile.ValueString()
 	wasmSha256 := data.WasmSha256.ValueString()
 
@@ -229,6 +254,48 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	tflog.Info(ctx, "Done updating canister")
 	return
+}
+
+// Returns the candid argument, hex-encoded.
+func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
+
+	// If encoded arguments were provided, use that
+	if !m.ArgHex.IsNull() {
+		return m.ArgHex.ValueString(), nil
+	}
+
+	// Otherwise, turn the terraform value into something that makes sense
+	// in the candid world
+	val, err := m.Arg.ToTerraformValue(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var data any
+	ty := val.Type().String()
+
+	// XXX: We currently only support string
+	switch ty {
+	case "tftypes.String":
+		var str string
+		err = val.As(&str)
+		if err != nil {
+			return "", err
+		}
+
+		data = str
+	default:
+		return "", errors.New(fmt.Sprintf("Cannot candid-encode value of type: %s", ty))
+
+	}
+
+	did, err := idl.Marshal([]any{data})
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(did), nil
+
 }
 
 func setCanisterCode(canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
