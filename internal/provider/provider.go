@@ -5,15 +5,19 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/aviate-labs/agent-go"
+	"github.com/aviate-labs/agent-go/identity"
 )
 
 // Ensure IcProvider satisfies various provider interfaces.
@@ -31,15 +35,37 @@ type IcProvider struct {
 // IcProviderModel describes the provider data model.
 type IcProviderModel struct{}
 
-func localhostConfig() agent.Config {
+func localhostConfig() (agent.Config, error) {
 
-	u, _ := url.Parse("http://localhost:4943")
-	config := agent.Config{
-		ClientConfig: &agent.ClientConfig{Host: u},
-		FetchRootKey: true,
+	// If IC_PEM_IDENTITY_PATH is provided, read the file as the identity
+	pemPath := os.Getenv("IC_PEM_IDENTITY_PATH")
+
+	var id identity.Identity
+	var config agent.Config
+
+	if len(pemPath) > 0 {
+
+		data, err := os.ReadFile(pemPath)
+
+		if err != nil {
+			return config, err
+		}
+
+		id, err = NewIdentityFromPEM(data)
+
+		if err != nil {
+			return config, err
+		}
 	}
 
-	return config
+	u, _ := url.Parse("http://localhost:4943")
+	config = agent.Config{
+		ClientConfig: &agent.ClientConfig{Host: u},
+		FetchRootKey: true,
+		Identity:     id,
+	}
+
+	return config, nil
 }
 
 func (p *IcProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -59,7 +85,15 @@ func (p *IcProvider) Configure(ctx context.Context, req provider.ConfigureReques
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
-	config := localhostConfig()
+	config, err := localhostConfig()
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Could not set up IC agent",
+			err.Error(),
+		)
+	}
+
+	tflog.Info(ctx, fmt.Sprintf("Using identity: %s", config.Identity.Sender().Encode()))
 
 	if resp.Diagnostics.HasError() {
 		return

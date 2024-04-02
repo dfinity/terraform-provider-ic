@@ -31,6 +31,7 @@ import (
 var _ resource.Resource = &CanisterResource{}
 var _ resource.ResourceWithImportState = &CanisterResource{}
 var _ resource.ResourceWithConfigValidators = &CanisterResource{}
+var _ resource.ResourceWithModifyPlan = &CanisterResource{}
 
 func NewCanisterResource() resource.Resource {
 	return &CanisterResource{}
@@ -60,6 +61,35 @@ func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.Confi
 			path.MatchRoot("arg"),
 			path.MatchRoot("arg_hex"),
 		),
+	}
+}
+
+/* Generate a warning if the planned modifications for the canister do not include the controller that is used by terraform */
+func (r *CanisterResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+
+	var data CanisterResourceModel
+
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	controllers := data.Controllers
+
+	// Check if the identity used to terraform is amongst the controllers
+	hasOurPrincipal := false
+	ourPrincipal := r.config.Identity.Sender().Encode()
+	for i := 0; i < len(controllers); i++ {
+		if controllers[i].ValueString() == ourPrincipal {
+			hasOurPrincipal = true
+			break
+		}
+	}
+
+	if !hasOurPrincipal {
+		resp.Diagnostics.AddWarning("Client Warning", fmt.Sprintf("Target set of controllers does not include principal used by Terraform: %s", ourPrincipal))
 	}
 }
 
@@ -168,6 +198,10 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	tflog.Info(ctx, fmt.Sprintf("Updating to new data: %s", data))
 
