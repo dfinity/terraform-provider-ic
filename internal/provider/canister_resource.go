@@ -347,17 +347,17 @@ func (r *CanisterResource) setCanisterCode(canisterId string, argHex string, was
 
 	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
 	if err != nil {
-		return err
+		return fmt.Errorf("Could not create agent: %w", err)
 	}
 
 	canisterIdP, err := principal.Decode(canisterId)
 	if err != nil {
-		return err
+		return fmt.Errorf("Could not decode principal: %w", err)
 	}
 
 	wasmModule, err := os.ReadFile(wasmFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("Could not read wasm module: %w", err)
 	}
 
 	// Check sha256
@@ -389,7 +389,7 @@ func (r *CanisterResource) setCanisterCode(canisterId string, argHex string, was
 
 	err = agent.InstallCode(installCodeArgs)
 	if err != nil {
-		return err
+		return fmt.Errorf("Could not install code: %w", err)
 	}
 
 	return nil
