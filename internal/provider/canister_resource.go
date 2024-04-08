@@ -45,7 +45,6 @@ type CanisterResource struct {
 // CanisterResourceModel describes the resource data model.
 type CanisterResourceModel struct {
 	Id          types.String   `tfsdk:"id"`
-	ModuleHash  types.String   `tfsdk:"module_hash"`
 	Controllers []types.String `tfsdk:"controllers"`
 	Arg         types.Dynamic  `tfsdk:"arg"`
 	ArgHex      types.String   `tfsdk:"arg_hex"`     /* Hex-represented didc-encoded arguments */
@@ -110,13 +109,6 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"module_hash": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Canister Wasm module hash",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
-			},
 			"controllers": schema.ListAttribute{
 				ElementType:         types.StringType,
 				MarkdownDescription: "Canister controllers",
@@ -172,8 +164,65 @@ func (r *CanisterResource) Configure(ctx context.Context, req resource.Configure
 }
 
 func (r *CanisterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var data CanisterResourceModel
 
-	resp.Diagnostics.AddError("Client Error", "Creating canisters is not supported yet")
+	// Read Terraform plan data into the model
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", err.Error())
+		return
+	}
+
+	createCanisterArgs := icMgmt.ProvisionalCreateCanisterWithCyclesArgs{}
+	res, err := agent.ProvisionalCreateCanisterWithCycles(createCanisterArgs)
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not create canister: "+err.Error())
+		return
+	}
+
+	canisterId := res.CanisterId
+	data.Id = types.StringValue(canisterId.Encode())
+	tflog.Info(ctx, "Created canister: "+canisterId.Encode())
+
+	/* Code install & args */
+
+	argHex, err := data.GetArgHex(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not read argument: "+err.Error())
+		return
+	}
+
+	wasmFile := data.WasmFile.ValueString()
+	wasmSha256 := data.WasmSha256.ValueString()
+
+	err = r.setCanisterCode(canisterId.Encode(), argHex, wasmFile, wasmSha256)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
+		return
+	}
+
+	/* Controllers */
+
+	// XXX: we set controllers at the very end so that e.g. blackhole code can be installed beforehand
+
+	controllers := make([]string, len(data.Controllers))
+	for i := 0; i < len(data.Controllers); i++ {
+		controllers[i] = data.Controllers[i].ValueString()
+	}
+	err = r.setCanisterControllers(canisterId.Encode(), controllers)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 	return
 }
 
@@ -286,6 +335,8 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 
 }
 
+// NOTE: this checks that the wasm file contents have the given checksum and returns an error
+// otherwise
 func (r *CanisterResource) setCanisterCode(canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
 
 	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
@@ -381,44 +432,55 @@ func (r *CanisterResource) Delete(ctx context.Context, req resource.DeleteReques
 	return
 }
 
+type CanisterInfo struct {
+	Controllers []string
+	WasmSha256  string /* hex encoded */
+}
+
 func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	tflog.Info(ctx, "Importing canister with ID: "+req.ID)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 
 	tflog.Info(ctx, "Decoding principal")
-	principal, err := principal.Decode(req.ID)
+	canisterId, err := principal.Decode(req.ID)
 	if err != nil {
 		tflog.Error(ctx, "Cannot decode principal")
 		return
 	}
 
-	agent, err := agent.New(*r.config)
+	canisterInfo, err := r.ReadCanisterInfo(ctx, canisterId)
 	if err != nil {
-		resp.Diagnostics.AddError("Agent error", "Cannot set up agent: "+err.Error())
+		resp.Diagnostics.AddError("Agent error", "Cannot read canister info: "+err.Error())
 		return
 	}
 
-	tflog.Info(ctx, "Reading canister module hash for "+principal.String())
-	moduleHash, err := agent.GetCanisterModuleHash(principal)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("wasm_sha256"), canisterInfo.WasmSha256)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("controllers"),
+		canisterInfo.Controllers)...)
+}
+
+func (r *CanisterResource) ReadCanisterInfo(ctx context.Context, canisterId principal.Principal) (CanisterInfo, error) {
+
+	tflog.Info(ctx, "Reading canister info for canister: "+canisterId.Encode())
+
+	agent, err := agent.New(*r.config)
 	if err != nil {
-		tflog.Error(ctx, "Cannot get canister module hash")
-		return
+		return CanisterInfo{}, fmt.Errorf("could not create agent: %w", err)
+	}
+
+	tflog.Info(ctx, "Reading canister module hash for "+canisterId.Encode())
+	moduleHash, err := agent.GetCanisterModuleHash(canisterId)
+	if err != nil {
+		return CanisterInfo{}, fmt.Errorf("could not get canister module hash: %w", err)
 	}
 
 	tflog.Info(ctx, "encoding module hash")
 	moduleHashString := hex.EncodeToString(moduleHash)
-	if err != nil {
-		tflog.Error(ctx, "Cannot decode canister module hash")
-		return
-	}
 
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("module_hash"), moduleHashString)...)
-
-	tflog.Info(ctx, "Reading canister controllers for "+principal.String())
-	controllers, err := agent.GetCanisterControllers(principal)
+	tflog.Info(ctx, "Reading canister controllers for "+canisterId.Encode())
+	controllers, err := agent.GetCanisterControllers(canisterId)
 	if err != nil {
-		tflog.Error(ctx, "Cannot get canister controllers")
-		return
+		return CanisterInfo{}, fmt.Errorf("could not get canister controllers: %w", err)
 	}
 
 	controller_principals := make([]string, len(controllers))
@@ -427,7 +489,5 @@ func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportS
 		controller_principals[i] = controllers[i].Encode()
 	}
 
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("controllers"),
-		controller_principals)...)
-
+	return CanisterInfo{WasmSha256: moduleHashString, Controllers: controller_principals}, nil
 }
