@@ -66,12 +66,18 @@ func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.Confi
 /* Generate a warning if the planned modifications for the canister do not include the controller that is used by terraform */
 func (r *CanisterResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 
-	var data CanisterResourceModel
+	// Here we use a pointer because terraform may pass a null value (e.g. in deletion)
+	var data *CanisterResourceModel
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// If terraform passed a null value (deletion) then there's nothing to do
+	if data == nil {
 		return
 	}
 
