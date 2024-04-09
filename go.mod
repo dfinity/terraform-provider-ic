@@ -2,10 +2,8 @@ module terraform-provider-ic
 
 go 1.22.1
 
-replace github.com/aviate-labs/agent-go v0.3.4 => github.com/nmattia/agent-go v0.0.0-20240326132430-9e8ed2b6dd6f
-
 require (
-	github.com/aviate-labs/agent-go v0.3.4
+	github.com/aviate-labs/agent-go v0.4.1
 	github.com/hashicorp/terraform-plugin-docs v0.18.0
 	github.com/hashicorp/terraform-plugin-framework v1.7.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.12.0
@@ -24,7 +22,6 @@ require (
 	github.com/aviate-labs/secp256k1 v0.0.0-5e6736a // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
-	github.com/di-wu/parser v0.3.0 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
