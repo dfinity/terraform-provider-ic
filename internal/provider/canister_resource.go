@@ -208,7 +208,8 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 	wasmFile := data.WasmFile.ValueString()
 	wasmSha256 := data.WasmSha256.ValueString()
 
-	err = r.setCanisterCode(canisterId.Encode(), argHex, wasmFile, wasmSha256)
+	installMode := icMgmt.CanisterInstallMode{Install: &idl.Null{}}
+	err = r.setCanisterCode(installMode, canisterId.Encode(), argHex, wasmFile, wasmSha256)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
 		return
@@ -286,7 +287,15 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 	wasmFile := data.WasmFile.ValueString()
 	wasmSha256 := data.WasmSha256.ValueString()
 
-	err = r.setCanisterCode(canisterId, argHex, wasmFile, wasmSha256)
+	skipPreUpgrade := false
+	update := struct {
+		SkipPreUpgrade *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
+	}{SkipPreUpgrade: &skipPreUpgrade}
+	ref := &update
+	installMode := icMgmt.CanisterInstallMode{
+		Upgrade: &ref,
+	}
+	err = r.setCanisterCode(installMode, canisterId, argHex, wasmFile, wasmSha256)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
 		return
@@ -343,7 +352,7 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 
 // NOTE: this checks that the wasm file contents have the given checksum and returns an error
 // otherwise
-func (r *CanisterResource) setCanisterCode(canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
+func (r *CanisterResource) setCanisterCode(installMode icMgmt.CanisterInstallMode, canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
 
 	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
 	if err != nil {
@@ -366,22 +375,13 @@ func (r *CanisterResource) setCanisterCode(canisterId string, argHex string, was
 		return errors.New(fmt.Sprintf("Sha256 mismatch, expected %s, got %s", wasmSha256, computed))
 	}
 
-	skipPreUpgrade := false
-	update := struct {
-		SkipPreUpgrade *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
-	}{SkipPreUpgrade: &skipPreUpgrade}
-
-	ref := &update
-
 	argRaw, err := hex.DecodeString(argHex)
 	if err != nil {
 		return err
 	}
 
 	installCodeArgs := icMgmt.InstallCodeArgs{
-		Mode: icMgmt.CanisterInstallMode{
-			Upgrade: &ref,
-		},
+		Mode:       installMode,
 		CanisterId: canisterIdP,
 		WasmModule: wasmModule,
 		Arg:        argRaw,
@@ -434,7 +434,39 @@ func (r *CanisterResource) setCanisterControllers(canisterId string, controllers
 }
 
 func (r *CanisterResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddError("Client Error", "Deleting canisters is not supported yet")
+	var data CanisterResourceModel
+
+	// Read Terraform prior state data into the model
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	canisterId, err := principal.Decode(data.Id.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Errorf("Could not parse canister ID: %w", err).Error())
+		return
+	}
+
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Errorf("Could not create agent: %w", err).Error())
+		return
+	}
+
+	err = agent.StopCanister(icMgmt.StopCanisterArgs{CanisterId: canisterId})
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Errorf("Could not stop canister before deletion: %w", err).Error())
+		return
+	}
+
+	err = agent.DeleteCanister(icMgmt.DeleteCanisterArgs{CanisterId: canisterId})
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", fmt.Errorf("Could not delete canister: %w", err).Error())
+		return
+	}
+
 	return
 }
 

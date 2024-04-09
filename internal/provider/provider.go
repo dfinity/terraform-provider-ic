@@ -35,7 +35,7 @@ type IcProvider struct {
 // IcProviderModel describes the provider data model.
 type IcProviderModel struct{}
 
-func localhostConfig() (agent.Config, error) {
+func LocalhostConfig() (agent.Config, error) {
 
 	// If IC_PEM_IDENTITY_PATH is provided, read the file as the identity
 	pemPath := os.Getenv("IC_PEM_IDENTITY_PATH")
@@ -85,7 +85,7 @@ func (p *IcProvider) Configure(ctx context.Context, req provider.ConfigureReques
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
-	config, err := localhostConfig()
+	config, err := LocalhostConfig()
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Could not set up IC agent",
