@@ -2,6 +2,8 @@ module terraform-provider-ic
 
 go 1.22.1
 
+replace github.com/aviate-labs/agent-go v0.4.1 => github.com/nmattia/agent-go v0.0.0-20240409135146-358f79c3766c
+
 require (
 	github.com/aviate-labs/agent-go v0.4.1
 	github.com/hashicorp/terraform-plugin-docs v0.18.0
