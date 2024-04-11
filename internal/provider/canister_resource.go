@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 
@@ -63,7 +62,7 @@ func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.Confi
 	}
 }
 
-/* Generate a warning if the planned modifications for the canister do not include the controller that is used by terraform */
+/* Generate a warning if the planned modifications for the canister do not include the controller that is used by terraform. */
 func (r *CanisterResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 
 	// Here we use a pointer because terraform may pass a null value (e.g. in deletion)
@@ -230,7 +229,6 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-	return
 }
 
 func (r *CanisterResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -248,7 +246,7 @@ func (r *CanisterResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-// XXX: this is NOT atomic
+// XXX: this is NOT atomic.
 func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data CanisterResourceModel
 
@@ -305,7 +303,6 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	tflog.Info(ctx, "Done updating canister")
-	return
 }
 
 // Returns the candid argument, hex-encoded.
@@ -337,7 +334,7 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 
 		data = str
 	default:
-		return "", errors.New(fmt.Sprintf("Cannot candid-encode value of type: %s", ty))
+		return "", fmt.Errorf("Cannot candid-encode value of type: %s", ty)
 
 	}
 
@@ -351,7 +348,7 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 }
 
 // NOTE: this checks that the wasm file contents have the given checksum and returns an error
-// otherwise
+// otherwise.
 func (r *CanisterResource) setCanisterCode(installMode icMgmt.CanisterInstallMode, canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
 
 	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
@@ -372,7 +369,7 @@ func (r *CanisterResource) setCanisterCode(installMode icMgmt.CanisterInstallMod
 	// Check sha256
 	computed := sha256.Sum256(wasmModule)
 	if wasmSha256 != hex.EncodeToString(computed[:]) {
-		return errors.New(fmt.Sprintf("Sha256 mismatch, expected %s, got %s", wasmSha256, computed))
+		return fmt.Errorf("Sha256 mismatch, expected %s, got %s", wasmSha256, computed)
 	}
 
 	argRaw, err := hex.DecodeString(argHex)
@@ -466,8 +463,6 @@ func (r *CanisterResource) Delete(ctx context.Context, req resource.DeleteReques
 		resp.Diagnostics.AddError("Client Error", fmt.Errorf("Could not delete canister: %w", err).Error())
 		return
 	}
-
-	return
 }
 
 type CanisterInfo struct {
