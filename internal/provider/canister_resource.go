@@ -58,6 +58,12 @@ func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.Confi
 			path.MatchRoot("arg"),
 			path.MatchRoot("arg_hex"),
 		),
+		/* If wasm_file is set, a sha must be given too. Moreover,
+		   a sha doesn't make sense without a file. */
+		resourcevalidator.RequiredTogether(
+			path.MatchRoot("wasm_file"),
+			path.MatchRoot("wasm_sha256"),
+		),
 	}
 }
 
@@ -135,12 +141,12 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "Hex representation of candid-encoded arguments. " + argDefaultDescription,
 			},
 			"wasm_file": schema.StringAttribute{
-				Required:            true,
+				Optional:            true,
 				MarkdownDescription: "Path to Wasm module to install",
 			},
 			"wasm_sha256": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "Sha256 sum of Wasm module (hex encoded)",
+				Optional:            true,
+				MarkdownDescription: "Sha256 sum of Wasm module (hex encoded). Required if `wasm_file` is specified.",
 			},
 		},
 	}
@@ -202,16 +208,21 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	wasmFile := data.WasmFile.ValueString()
-	wasmSha256 := data.WasmSha256.ValueString()
+	// If the wasm file is not null, then install the code.
+	if !data.WasmFile.IsNull() {
 
-	installMode := icMgmt.CanisterInstallMode{Install: &idl.Null{}}
-	err = r.setCanisterCode(installMode, canisterId.Encode(), argHex, wasmFile, wasmSha256)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
-		return
+		wasmFile := data.WasmFile.ValueString()
+		// If the wasm file is not null, then the sha256 is set (through resourcevalidator)
+		wasmSha256 := data.WasmSha256.ValueString()
+
+		installMode := icMgmt.CanisterInstallMode{Install: &idl.Null{}}
+		err = r.setCanisterCode(installMode, canisterId.Encode(), argHex, wasmFile, wasmSha256)
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
+			return
+		}
+
 	}
-
 	/* Controllers */
 
 	// XXX: we set controllers at the very end so that e.g. blackhole code can be installed beforehand
