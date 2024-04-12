@@ -53,9 +53,8 @@ type CanisterResourceModel struct {
 
 func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
 	return []resource.ConfigValidator{
-		/* Exactly one of arg & arg_hex must be specified.
-		   XXX: we currently don't support _not_ setting an argument */
-		resourcevalidator.ExactlyOneOf(
+		/* arg & arg_hex cannot be both set. */
+		resourcevalidator.Conflicting(
 			path.MatchRoot("arg"),
 			path.MatchRoot("arg_hex"),
 		),
@@ -102,6 +101,8 @@ func (r *CanisterResource) Metadata(ctx context.Context, req resource.MetadataRe
 }
 
 func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+
+	var argDefaultDescription = "If neither `arg` nor `arg_hex` is set, the argument defaults to the empty blob (and not for instance to a Candid `null`)."
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Canister resource",
@@ -126,15 +127,12 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 			"arg": schema.DynamicAttribute{
 				Optional: true,
 
-				MarkdownDescription: "Init & post_upgrade arguments for the canister. Heuristics are used to convert it to candid.",
+				MarkdownDescription: "Init & post_upgrade arguments for the canister. Heuristics are used to convert it to candid. " + argDefaultDescription,
 			},
 			"arg_hex": schema.StringAttribute{
 				Optional: true,
 
-				MarkdownDescription: "Hex representation of candid-encoded arguments",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+				MarkdownDescription: "Hex representation of candid-encoded arguments. " + argDefaultDescription,
 			},
 			"wasm_file": schema.StringAttribute{
 				Required:            true,
@@ -313,6 +311,11 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 		return m.ArgHex.ValueString(), nil
 	}
 
+	// If no args are set, use the empty bytestring (hex encoding: empty string)
+	if m.Arg.IsNull() {
+		return "", nil
+	}
+
 	// Otherwise, turn the terraform value into something that makes sense
 	// in the candid world
 	val, err := m.Arg.ToTerraformValue(ctx)
@@ -334,7 +337,7 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 
 		data = str
 	default:
-		return "", fmt.Errorf("Cannot candid-encode value of type: %s", ty)
+		return "", fmt.Errorf("Cannot candid-encode value %s of type: %s", m.Arg.String(), ty)
 
 	}
 

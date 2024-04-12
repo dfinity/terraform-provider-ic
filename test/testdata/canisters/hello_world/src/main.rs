@@ -1,7 +1,8 @@
 #![no_main]
 
+use ic_cdk::api::call::arg_data_raw;
 use ic_cdk::println;
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk_macros::{post_upgrade, query};
 use ic_stable_structures::{DefaultMemoryImpl, StableCell};
 use std::cell::RefCell;
 
@@ -10,19 +11,31 @@ thread_local! {
            RefCell::new(StableCell::init(DefaultMemoryImpl::default(),"Hello".to_string()).unwrap());
 }
 
-#[init]
-fn init(arg: Option<String>) {
-    if let Some(greeter) = arg {
-        GREETER.with_borrow_mut(|grt| grt.set(greeter)).unwrap();
-    }
+#[export_name = "canister_init"]
+fn init() {
+    /* Here we do the whole arg parsing manually to allow passing an empty bytestring */
+    ic_cdk::setup();
+
+    let arg_raw = arg_data_raw();
+    let default_greeter = "Hello".to_string();
+
+    let greeter = if arg_raw.is_empty() {
+        default_greeter
+    } else {
+        let (arg,): (Option<String>,) =
+            candid::decode_args(&arg_raw).expect("Could not decode init args");
+        arg.unwrap_or(default_greeter)
+    };
+    GREETER.with_borrow_mut(|grt| grt.set(greeter)).unwrap();
+
     let val = GREETER.with_borrow(|grt| grt.get().clone());
 
     println!("Init with greeter: {val}");
 }
 
 #[post_upgrade]
-fn post_upgrade(arg: Option<String>) {
-    init(arg)
+fn post_upgrade() {
+    init()
 }
 
 #[query]
