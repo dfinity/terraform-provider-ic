@@ -188,9 +188,6 @@ func TestAccCanisterResourceEmpty(t *testing.T) {
 				Config: VariablesConfig + `
 resource "ic_canister" "test" {
     controllers = [ var.provider_controller ]
-
-    wasm_file = var.hello_world_wasm
-    wasm_sha256 = filesha256(var.hello_world_wasm)
 }
 `,
 			},
