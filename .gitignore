@@ -26,6 +26,8 @@ website/node_modules
 *.iml
 
 website/vendor
+target/
+*.wasm
 
 # Test exclusions
 !command/test-fixtures/**/*.tfstate
