@@ -93,11 +93,12 @@ func (p *IcProvider) Configure(ctx context.Context, req provider.ConfigureReques
 		)
 	}
 
-	tflog.Info(ctx, fmt.Sprintf("Using identity: %s", config.Identity.Sender().Encode()))
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// XXX: identity may not be defined (NPE)
+	tflog.Info(ctx, fmt.Sprintf("Using identity: %s", config.Identity.Sender().Encode()))
 
 	resp.ResourceData = &config
 }

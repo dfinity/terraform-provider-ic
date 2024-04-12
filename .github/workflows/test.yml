@@ -38,6 +38,30 @@ jobs:
         with:
           version: latest
 
+  build-testdata:
+    name: Build Test Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install ic-wasm
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL https://github.com/dfinity/ic-wasm/releases/download/0.7.1/ic-wasm-linux64 -o "$HOME/.local/bin/ic-wasm"
+          chmod +x "$HOME/.local/bin/ic-wasm"
+          ic-wasm --help
+      - name: Rust setup
+        run: |
+          rustup default 1.76.0
+          rustup target add wasm32-unknown-unknown
+      - name: Build test data
+        run: make testdata
+      - uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+        with:
+          name: hello-world-wasm
+          path: test/testdata/canisters/hello_world/hello-world.wasm
+
   generate:
     if: false # disabled until ready
     runs-on: ubuntu-latest
@@ -62,7 +86,7 @@ jobs:
   # Run acceptance tests in a matrix with Terraform CLI versions
   test:
     name: Terraform Provider Acceptance Tests
-    needs: build
+    needs: [build, build-testdata]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -86,6 +110,14 @@ jobs:
           terraform_version: ${{ matrix.terraform }}
           terraform_wrapper: false
       - run: go mod download
+      - name: Install dfx
+        uses: dfinity/setup-dfx@e50c04f104ee4285ec010f10609483cf41e4d365
+      - run: dfx start --background
+      - uses: actions/download-artifact@c850b930e6ba138125429b7e5c93fc707a7f8427 # v4.1.4
+        with:
+          name: hello-world-wasm
+          path: test/testdata/canisters/hello_world/
+      - run: ls -lah test/testdata/canisters/hello_world/hello-world.wasm
       - env:
           TF_ACC: "1"
         run: go test -v -cover ./internal/provider/
