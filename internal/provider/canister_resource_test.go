@@ -186,10 +186,13 @@ func TestAccCanisterResourceEmpty(t *testing.T) {
 			{
 				ConfigVariables: configVariables,
 				Config: VariablesConfig + `
-resource "ic_canister" "test" {
-    controllers = [ var.provider_controller ]
-}
+resource "ic_canister" "test" {}
 `,
+				/* Check that a canister with no configuration is initialized with the provider's own principal */
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ic_canister.test", "controllers.#", "1"),
+					resource.TestCheckResourceAttr("ic_canister.test", "controllers.0", providerController),
+				),
 			},
 			// Delete testing automatically occurs in TestCase
 		},

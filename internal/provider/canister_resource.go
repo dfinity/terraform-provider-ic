@@ -11,12 +11,14 @@ import (
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/aviate-labs/agent-go"
@@ -41,14 +43,18 @@ type CanisterResource struct {
 	config *agent.Config
 }
 
+func (c *CanisterResource) ProviderPrincipal() string {
+	return c.config.Identity.Sender().Encode()
+}
+
 // CanisterResourceModel describes the resource data model.
 type CanisterResourceModel struct {
-	Id          types.String   `tfsdk:"id"`
-	Controllers []types.String `tfsdk:"controllers"`
-	Arg         types.Dynamic  `tfsdk:"arg"`
-	ArgHex      types.String   `tfsdk:"arg_hex"`     /* Hex-represented didc-encoded arguments */
-	WasmFile    types.String   `tfsdk:"wasm_file"`   /* path to Wasm module */
-	WasmSha256  types.String   `tfsdk:"wasm_sha256"` /* base64-encoded Wasm module */
+	Id          types.String  `tfsdk:"id"`
+	Controllers types.List    `tfsdk:"controllers"`
+	Arg         types.Dynamic `tfsdk:"arg"`
+	ArgHex      types.String  `tfsdk:"arg_hex"`     /* Hex-represented didc-encoded arguments */
+	WasmFile    types.String  `tfsdk:"wasm_file"`   /* path to Wasm module */
+	WasmSha256  types.String  `tfsdk:"wasm_sha256"` /* base64-encoded Wasm module */
 }
 
 func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
@@ -67,15 +73,76 @@ func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.Confi
 	}
 }
 
+/* If the Controllers are Unknown or Null, update them (default) to the currently configured provider
+ * principal. After this function has been called, the controllers are not null or unknown. */
+func (data *CanisterResourceModel) InferDefaultControllers(ctx context.Context, config *agent.Config) error {
+
+	tflog.Info(ctx, "Inferring controllers")
+	providerController := config.Identity.Sender().Encode()
+
+	if data.Controllers.IsNull() {
+		elements := []attr.Value{types.StringValue(providerController)}
+		data.Controllers = basetypes.NewListValueMust(types.StringType, elements)
+	}
+
+	if data.Controllers.IsUnknown() {
+		elements := []attr.Value{types.StringValue(providerController)}
+		data.Controllers = basetypes.NewListValueMust(types.StringType, elements)
+	}
+
+	return nil
+}
+
+func (data *CanisterResourceModel) StringControllers(ctx context.Context, config *agent.Config) ([]string, error) {
+
+	if data.Controllers.IsNull() {
+		return nil, nil
+	}
+
+	if data.Controllers.IsUnknown() {
+		return nil, nil
+	}
+
+	// From here on, we know the Controllers are set
+
+	controllersRaw := data.Controllers.Elements()
+	controllers := make([]string, len(controllersRaw))
+
+	for i := 0; i < len(controllers); i++ {
+		controllerTF, err := controllersRaw[i].ToTerraformValue(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		ty := controllerTF.Type().String()
+
+		if ty != "tftypes.String" {
+			return nil, fmt.Errorf("Expected element type %s, got %s", controllerTF.String(), ty)
+		}
+
+		var str string
+		err = controllerTF.As(&str)
+		if err != nil {
+			return nil, fmt.Errorf("Could not cast controller element: %w", err)
+		}
+
+		controllers[i] = str
+
+	}
+
+	return controllers, nil
+}
+
 /* Generate a warning if the planned modifications for the canister do not include the controller that is used by terraform. */
 func (r *CanisterResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 
 	// Here we use a pointer because terraform may pass a null value (e.g. in deletion)
 	var data *CanisterResourceModel
 
+	tflog.Info(ctx, "Checking that provider controller is not removed")
+
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -85,13 +152,27 @@ func (r *CanisterResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		return
 	}
 
-	controllers := data.Controllers
+	controllers, err := data.StringControllers(ctx, r.config)
+
+	if err != nil {
+		resp.Diagnostics.AddError("Client error", fmt.Sprintf("Could not read controllers: %s", err.Error()))
+	}
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// The controllers being nil means we haven't yet figured out what controllers
+	// to set (will be set to the provider's principal during creation)
+	if controllers == nil {
+		return
+	}
 
 	// Check if the identity used to terraform is amongst the controllers
 	hasOurPrincipal := false
-	ourPrincipal := r.config.Identity.Sender().Encode()
+	ourPrincipal := r.ProviderPrincipal()
 	for i := 0; i < len(controllers); i++ {
-		if controllers[i].ValueString() == ourPrincipal {
+		if controllers[i] == ourPrincipal {
 			hasOurPrincipal = true
 			break
 		}
@@ -107,6 +188,8 @@ func (r *CanisterResource) Metadata(ctx context.Context, req resource.MetadataRe
 }
 
 func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+
+	// XXX: at this point, CanisterResource is not initialized yet
 
 	var argDefaultDescription = "If neither `arg` nor `arg_hex` is set, the argument defaults to the empty blob (and not for instance to a Candid `null`)."
 	resp.Schema = schema.Schema{
@@ -126,7 +209,11 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "Canister controllers",
 
 				/* the controllers can either be fetched from the replica, or
-				   set directly if necessary */
+				set directly if necessary.
+				Upon canister creation, the following applies to controllers
+				 * not set or null: use the provider's controller as only controller
+				 * empty list: blackhole canister
+				*/
 				Computed: true,
 				Optional: true,
 			},
@@ -153,6 +240,7 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 }
 
 func (r *CanisterResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	tflog.Info(ctx, "Configuring canister resource")
 	// Prevent panic if the provider has not been configured.
 	if req.ProviderData == nil {
 		return
@@ -223,14 +311,29 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 		}
 
 	}
-	/* Controllers */
 
 	// XXX: we set controllers at the very end so that e.g. blackhole code can be installed beforehand
 
-	controllers := make([]string, len(data.Controllers))
-	for i := 0; i < len(data.Controllers); i++ {
-		controllers[i] = data.Controllers[i].ValueString()
+	/* Controllers */
+
+	err = data.InferDefaultControllers(ctx, r.config)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
+		return
 	}
+
+	controllers, err := data.StringControllers(ctx, r.config)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
+		return
+	}
+
+	// We did just call InferDefaultControllers, so if the controllers are not set this is a bad bug
+	if controllers == nil {
+		resp.Diagnostics.AddError("Client Error", "Controllers not set")
+		return
+	}
+
 	err = r.setCanisterControllers(canisterId.Encode(), controllers)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
@@ -272,12 +375,20 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	/* Controllers */
 
-	controllers := make([]string, len(data.Controllers))
-	for i := 0; i < len(data.Controllers); i++ {
-		controllers[i] = data.Controllers[i].ValueString()
+	controllers, err := data.StringControllers(ctx, r.config)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
+		return
 	}
 
-	err := r.setCanisterControllers(canisterId, controllers)
+	// Here we don't expect nil (unknown/null) controllers. We only expect unknown or null controllers
+	// during the initial creation.
+	if controllers == nil {
+		resp.Diagnostics.AddError("Client Error", "Controllers not set")
+		return
+	}
+
+	err = r.setCanisterControllers(canisterId, controllers)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", "Could not update controllers: "+err.Error())
 		return
