@@ -5,77 +5,67 @@ package provider
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"path"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/aviate-labs/agent-go"
-	"github.com/aviate-labs/agent-go/identity"
 	"github.com/aviate-labs/agent-go/principal"
-	"github.com/hashicorp/terraform-plugin-testing/config"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-/* Creates a PEM file in a temporary directory. */
-func CreateTestPEM(t *testing.T) (string, identity.Identity) {
+func TestAccCanisterResource(t *testing.T) {
 
-	id, err := identity.NewRandomEd25519Identity()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testEnv := NewTestEnv(t)
 
-	tmpdir := t.TempDir()
-	pemPath := path.Join(tmpdir, "pem")
-
-	data, err := id.ToPEM()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.WriteFile(pemPath, data, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return pemPath, id
+	/* We initialize the hello world canister with a greeting, and then call the `hello` method
+	 * to make sure the specified greeting is used (i.e. ensure that the args are set) */
+	greeting := "Salut"
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				Config: VariablesConfig + fmt.Sprintf(`
+resource "ic_canister" "test" {
+    arg = "%s"
+    controllers = [ var.provider_controller ]
+    wasm_file = var.hello_world_wasm
+    wasm_sha256 = filesha256(var.hello_world_wasm)
+}
+`, greeting),
+				Check: func(s *terraform.State) error {
+					greeted := "terraform"
+					expected := fmt.Sprintf("%s, %s!", greeting, greeted)
+					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
+				},
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
 }
 
-/* Returns the root of the repo. */
-func GetRepoRoot(t *testing.T) string {
+func TestAccCanisterResourceEmpty(t *testing.T) {
 
-	cmdOut, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testEnv := NewTestEnv(t)
 
-	return strings.TrimSpace(string(cmdOut))
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				Config: VariablesConfig + `
+resource "ic_canister" "test" {}
+`,
+				/* Check that a canister with no configuration is initialized with the provider's own principal */
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ic_canister.test", "controllers.#", "1"),
+					resource.TestCheckResourceAttr("ic_canister.test", "controllers.0", testEnv.Identity.Sender().Encode()),
+				),
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
 }
-
-func GetHelloWorldWasmPath(t *testing.T) string {
-
-	repoRoot := GetRepoRoot(t)
-
-	helloWorldWasm, err := filepath.Abs(path.Join(repoRoot, "test/testdata/canisters/hello_world/hello-world.wasm"))
-	if err != nil {
-		t.Fatalf("Could not read absolute path of test Wasm module")
-	}
-
-	return helloWorldWasm
-}
-
-var VariablesConfig = `
-variable "hello_world_wasm" {
-    type = string
-}
-
-variable "provider_controller" {
-    type = string
-}
-`
 
 /*
 	Check that the update call to the canister with the given resource name returns a string with
@@ -120,81 +110,4 @@ func checkCanisterReplyString(s *terraform.State, resourceName string, methodNam
 	}
 
 	return nil
-}
-
-func TestAccCanisterResource(t *testing.T) {
-	pemPath, id := CreateTestPEM(t)
-
-	t.Setenv("IC_PEM_IDENTITY_PATH", pemPath)
-
-	configVariables := map[string]config.Variable{}
-
-	/* The path to the test canister used in the terraforming */
-	helloWorldWasm := GetHelloWorldWasmPath(t)
-	configVariables["hello_world_wasm"] = config.StringVariable(helloWorldWasm)
-
-	/* Use a temporary PEM as identity and inject it into the terraform config */
-	providerController := id.Sender().Encode()
-	configVariables["provider_controller"] = config.StringVariable(providerController)
-
-	/* We initialize the hello world canister with a greeting, and then call the `hello` method
-	 * to make sure the specified greeting is used (i.e. the args are set) */
-	greeting := "Salut"
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				ConfigVariables: configVariables,
-				Config: VariablesConfig + fmt.Sprintf(`
-resource "ic_canister" "test" {
-    arg = "%s"
-    controllers = [ var.provider_controller ]
-    wasm_file = var.hello_world_wasm
-    wasm_sha256 = filesha256(var.hello_world_wasm)
-}
-`, greeting),
-				Check: func(s *terraform.State) error {
-					greeted := "terraform"
-					expected := fmt.Sprintf("%s, %s!", greeting, greeted)
-					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
-				},
-			},
-			// Delete testing automatically occurs in TestCase
-		},
-	})
-}
-
-func TestAccCanisterResourceEmpty(t *testing.T) {
-
-	pemPath, id := CreateTestPEM(t)
-
-	t.Setenv("IC_PEM_IDENTITY_PATH", pemPath)
-
-	configVariables := map[string]config.Variable{}
-
-	/* The path to the test canister used in the terraforming */
-	helloWorldWasm := GetHelloWorldWasmPath(t)
-	configVariables["hello_world_wasm"] = config.StringVariable(helloWorldWasm)
-
-	/* Use a temporary PEM as identity and inject it into the terraform config */
-	providerController := id.Sender().Encode()
-	configVariables["provider_controller"] = config.StringVariable(providerController)
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				ConfigVariables: configVariables,
-				Config: VariablesConfig + `
-resource "ic_canister" "test" {}
-`,
-				/* Check that a canister with no configuration is initialized with the provider's own principal */
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("ic_canister.test", "controllers.#", "1"),
-					resource.TestCheckResourceAttr("ic_canister.test", "controllers.0", providerController),
-				),
-			},
-			// Delete testing automatically occurs in TestCase
-		},
-	})
 }

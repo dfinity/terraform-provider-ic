@@ -206,7 +206,7 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"controllers": schema.ListAttribute{
 				ElementType:         types.StringType,
-				MarkdownDescription: "Canister controllers",
+				MarkdownDescription: "Canister controllers. When creating a new canister, defaults to the principal used by the provider.",
 
 				/* the controllers can either be fetched from the replica, or
 				set directly if necessary.
