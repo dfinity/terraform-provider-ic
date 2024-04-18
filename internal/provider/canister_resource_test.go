@@ -152,9 +152,7 @@ func checkCanisterReplyString(s *terraform.State, resourceName string, methodNam
 	return nil
 }
 
-/*
-Check that the update call to the canister with the given resource name returns a string with the expected value.
-*/
+/* Check that the module has of the given canister matches the (hex-encoded) expected value. */
 func checkCanisterModuleHash(s *terraform.State, resourceName string, expected string) error {
 	rs, ok := s.RootModule().Resources[resourceName]
 	if !ok {
