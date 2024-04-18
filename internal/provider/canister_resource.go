@@ -313,6 +313,9 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	// XXX: we set controllers at the very end so that e.g. blackhole code can be installed beforehand
+	// NOTE: we do not test the creation of blackhole canisters because the terraform testing framework
+	// does not support resources that can't be deleted, so this is really best effort:
+	//   * https://github.com/hashicorp/terraform-plugin-testing/issues/85
 
 	/* Controllers */
 
