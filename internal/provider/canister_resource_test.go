@@ -84,6 +84,29 @@ func TestAccCanisterResource(t *testing.T) {
 	})
 }
 
+func TestAccCanisterResourceMany(t *testing.T) {
+
+	testEnv := NewTestEnv(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				Config: VariablesConfig + `
+resource "ic_canister" "test" {
+            count = 10
+            arg = "Hello-${count.index}"
+            wasm_file = var.hello_world_wasm
+            wasm_sha256 = filesha256(var.hello_world_wasm)
+}
+`,
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
 func TestAccCanisterResourceEmpty(t *testing.T) {
 
 	testEnv := NewTestEnv(t)
