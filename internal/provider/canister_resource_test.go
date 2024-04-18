@@ -17,25 +17,37 @@ func TestAccCanisterResource(t *testing.T) {
 
 	testEnv := NewTestEnv(t)
 
+	helloWorldWithArg := func(arg string) string {
+		return fmt.Sprintf(`
+        resource "ic_canister" "test" {
+            arg = "%s"
+            controllers = [ var.provider_controller ]
+            wasm_file = var.hello_world_wasm
+            wasm_sha256 = filesha256(var.hello_world_wasm)
+        }
+        `, arg)
+	}
+
+	greeted := "terraform"
+
 	/* We initialize the hello world canister with a greeting, and then call the `hello` method
 	 * to make sure the specified greeting is used (i.e. ensure that the args are set) */
-	greeting := "Salut"
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config: VariablesConfig + fmt.Sprintf(`
-resource "ic_canister" "test" {
-    arg = "%s"
-    controllers = [ var.provider_controller ]
-    wasm_file = var.hello_world_wasm
-    wasm_sha256 = filesha256(var.hello_world_wasm)
-}
-`, greeting),
+				Config:          VariablesConfig + helloWorldWithArg("Salut"),
 				Check: func(s *terraform.State) error {
-					greeted := "terraform"
-					expected := fmt.Sprintf("%s, %s!", greeting, greeted)
+					expected := fmt.Sprintf("Salut, %s!", greeted)
+					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
+				},
+			},
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				Config:          VariablesConfig + helloWorldWithArg("Hello"),
+				Check: func(s *terraform.State) error {
+					expected := fmt.Sprintf("Hello, %s!", greeted)
 					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
 				},
 			},
