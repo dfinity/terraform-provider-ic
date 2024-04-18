@@ -4,6 +4,7 @@
 package provider
 
 import (
+	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -17,15 +18,25 @@ func TestAccCanisterResource(t *testing.T) {
 
 	testEnv := NewTestEnv(t)
 
-	helloWorldWithArg := func(arg string) string {
-		return fmt.Sprintf(`
+	helloWorldWithArg := func(arg string, installWasm bool) string {
+
+		config := fmt.Sprintf(`
         resource "ic_canister" "test" {
             arg = "%s"
             controllers = [ var.provider_controller ]
+        `, arg)
+
+		if installWasm {
+			config += `
             wasm_file = var.hello_world_wasm
             wasm_sha256 = filesha256(var.hello_world_wasm)
-        }
-        `, arg)
+        `
+		}
+
+		config += "}"
+
+		return config
+
 	}
 
 	greeted := "terraform"
@@ -35,9 +46,18 @@ func TestAccCanisterResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
+			// Create an empty canister
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config:          VariablesConfig + helloWorldWithArg("Salut"),
+				Config:          VariablesConfig + helloWorldWithArg("", false),
+				Check: func(s *terraform.State) error {
+					return checkCanisterModuleHash(s, "ic_canister.test", "")
+				},
+			},
+			// Install Wasm + play with args
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				Config:          VariablesConfig + helloWorldWithArg("Salut", true),
 				Check: func(s *terraform.State) error {
 					expected := fmt.Sprintf("Salut, %s!", greeted)
 					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
@@ -45,10 +65,18 @@ func TestAccCanisterResource(t *testing.T) {
 			},
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config:          VariablesConfig + helloWorldWithArg("Hello"),
+				Config:          VariablesConfig + helloWorldWithArg("Hello", true),
 				Check: func(s *terraform.State) error {
 					expected := fmt.Sprintf("Hello, %s!", greeted)
 					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
+				},
+			},
+			// Uninstall Wasm
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				Config:          VariablesConfig + helloWorldWithArg("", false),
+				Check: func(s *terraform.State) error {
+					return checkCanisterModuleHash(s, "ic_canister.test", "")
 				},
 			},
 			// Delete testing automatically occurs in TestCase
@@ -119,6 +147,47 @@ func checkCanisterReplyString(s *terraform.State, resourceName string, methodNam
 
 	if result != expected {
 		return fmt.Errorf("Mismatches reply: %s != %s", result, expected)
+	}
+
+	return nil
+}
+
+/* Check that the module has of the given canister matches the (hex-encoded) expected value. */
+func checkCanisterModuleHash(s *terraform.State, resourceName string, expected string) error {
+	rs, ok := s.RootModule().Resources[resourceName]
+	if !ok {
+		return fmt.Errorf("No canister exists")
+	}
+
+	canisterId := rs.Primary.ID
+
+	if canisterId == "" {
+		return fmt.Errorf("Canister does not have an ID")
+	}
+
+	config, err := LocalhostConfig()
+	if err != nil {
+		return fmt.Errorf("Could not get config")
+	}
+
+	agent, err := agent.New(config)
+	if err != nil {
+		return fmt.Errorf("Could not create agent: %w", err)
+	}
+
+	canisterIdP, err := principal.Decode(canisterId)
+	if err != nil {
+		return fmt.Errorf("Could not decode principal %s: %w", canisterId, err)
+	}
+
+	moduleHash, err := agent.GetCanisterModuleHash(canisterIdP)
+	if err != nil {
+		return fmt.Errorf("could not get canister module hash: %w", err)
+	}
+
+	moduleHashString := hex.EncodeToString(moduleHash)
+	if moduleHashString != expected {
+		return fmt.Errorf("module hash mismatch: '%s' != '%s'", moduleHashString, expected)
 	}
 
 	return nil

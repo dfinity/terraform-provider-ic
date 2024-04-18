@@ -303,8 +303,8 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 		// If the wasm file is not null, then the sha256 is set (through resourcevalidator)
 		wasmSha256 := data.WasmSha256.ValueString()
 
-		installMode := icMgmt.CanisterInstallMode{Install: &idl.Null{}}
-		err = r.setCanisterCode(installMode, canisterId.Encode(), argHex, wasmFile, wasmSha256)
+		// We're creating a new canister, so we always use "install"
+		err = r.setCanisterCode(ctx, canisterId.Encode(), argHex, wasmFile, wasmSha256)
 		if err != nil {
 			resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
 			return
@@ -399,33 +399,78 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	/* Code install & args */
 
-	argHex, err := data.GetArgHex(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Could not read argument: "+err.Error())
-		return
-	}
+	if data.WasmFile.IsNull() {
+		// If there is no wasm, then we uninstall the canister (idempotent)
 
-	wasmFile := data.WasmFile.ValueString()
-	wasmSha256 := data.WasmSha256.ValueString()
+		err = r.setCanisterEmpty(canisterId)
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", "Could not uninstall code: "+err.Error())
+			return
+		}
 
-	skipPreUpgrade := false
-	update := struct {
-		SkipPreUpgrade *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
-	}{SkipPreUpgrade: &skipPreUpgrade}
-	ref := &update
-	installMode := icMgmt.CanisterInstallMode{
-		Upgrade: &ref,
-	}
-	err = r.setCanisterCode(installMode, canisterId, argHex, wasmFile, wasmSha256)
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
-		return
+	} else {
+		// If wasm is set, then install it with the given args (idempotent)
+
+		argHex, err := data.GetArgHex(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", "Could not read argument: "+err.Error())
+			return
+		}
+
+		wasmFile := data.WasmFile.ValueString()
+		wasmSha256 := data.WasmSha256.ValueString()
+		err = r.setCanisterCode(ctx, canisterId, argHex, wasmFile, wasmSha256)
+		if err != nil {
+			resp.Diagnostics.AddError("Client Error", "Could not update code: "+err.Error())
+			return
+		}
 	}
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 	tflog.Info(ctx, "Done updating canister")
+}
+
+// Ensures the canister is empty (no code installed).
+func (r *CanisterResource) setCanisterEmpty(canisterId string) error {
+
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
+	if err != nil {
+		return fmt.Errorf("Uninstalling canister: Could not create agent: %w", err)
+	}
+
+	canisterIdP, err := principal.Decode(canisterId)
+	if err != nil {
+		return fmt.Errorf("Uninstalling canister: Could not decode principal: %w", err)
+	}
+
+	uninstallCodeArgs := icMgmt.UninstallCodeArgs{
+		CanisterId: canisterIdP,
+	}
+
+	err = agent.UninstallCode(uninstallCodeArgs)
+	if err != nil {
+		return fmt.Errorf("Uninstalling canister: Could not uninstall code: %w", err)
+	}
+
+	return nil
+
+}
+
+func CanisterInstallModeInstall() icMgmt.CanisterInstallMode {
+	return icMgmt.CanisterInstallMode{Install: &idl.Null{}}
+}
+
+func CanisterInstallModeUpgrade() icMgmt.CanisterInstallMode {
+	skipPreUpgrade := false
+	update := struct {
+		SkipPreUpgrade *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
+	}{SkipPreUpgrade: &skipPreUpgrade}
+	ref := &update
+	return icMgmt.CanisterInstallMode{
+		Upgrade: &ref,
+	}
 }
 
 // Returns the candid argument, hex-encoded.
@@ -477,7 +522,12 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 
 // NOTE: this checks that the wasm file contents have the given checksum and returns an error
 // otherwise.
-func (r *CanisterResource) setCanisterCode(installMode icMgmt.CanisterInstallMode, canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
+func (r *CanisterResource) setCanisterCode(ctx context.Context, canisterId string, argHex string, wasmFile string, wasmSha256 string) error {
+
+	installMode, err := r.InferInstallMode(ctx, canisterId)
+	if err != nil {
+		return fmt.Errorf("Could not infer install mode: %w", err)
+	}
 
 	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
 	if err != nil {
@@ -618,6 +668,37 @@ func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("wasm_sha256"), canisterInfo.WasmSha256)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("controllers"),
 		canisterInfo.Controllers)...)
+}
+
+func (r *CanisterResource) InferInstallMode(ctx context.Context, canisterIdS string) (icMgmt.CanisterInstallMode, error) {
+
+	installMode := icMgmt.CanisterInstallMode{}
+
+	canisterId, err := principal.Decode(canisterIdS)
+	if err != nil {
+		return installMode, fmt.Errorf("Could not decode canister principal: %w", err)
+	}
+
+	tflog.Info(ctx, "Reading canister info for canister: "+canisterId.Encode())
+
+	agent, err := agent.New(*r.config)
+	if err != nil {
+		return installMode, fmt.Errorf("could not create agent: %w", err)
+	}
+
+	tflog.Info(ctx, "Reading canister module hash for "+canisterId.Encode())
+	moduleHash, err := agent.GetCanisterModuleHash(canisterId)
+	if err != nil {
+		return installMode, fmt.Errorf("could not get canister module hash: %w", err)
+	}
+
+	if len(moduleHash) == 0 {
+		installMode = CanisterInstallModeInstall()
+	} else {
+		installMode = CanisterInstallModeUpgrade()
+	}
+
+	return installMode, nil
 }
 
 func (r *CanisterResource) ReadCanisterInfo(ctx context.Context, canisterId principal.Principal) (CanisterInfo, error) {
