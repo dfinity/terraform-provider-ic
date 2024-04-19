@@ -6,9 +6,12 @@ package provider
 import (
 	"encoding/hex"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/aviate-labs/agent-go"
+	"github.com/aviate-labs/agent-go/ic"
+	icMgmt "github.com/aviate-labs/agent-go/ic/ic"
 	"github.com/aviate-labs/agent-go/principal"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -130,6 +133,61 @@ resource "ic_canister" "test" {}
 	})
 }
 
+func TestAccCanisterResourceImport(t *testing.T) {
+
+	testEnv := NewTestEnv(t)
+
+	canisterId, err := createCanisterFromWasmPath(testEnv.HelloWorldWasmPath)
+
+	if err != nil {
+		t.Fatalf("Could not create canister: %s", err.Error())
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				ImportState:     true,
+				ImportStateId:   canisterId,
+				ResourceName:    "ic_canister.test",
+
+				// Check that the canister was installed
+				ImportStateCheck: func(instances []*terraform.InstanceState) error {
+
+					found := false
+
+					for i := 0; i < len(instances); i++ {
+						instance := instances[i]
+						if instance.ID != canisterId {
+							continue
+						}
+
+						found = true
+
+						moduleHash := instance.Attributes["wasm_sha256"]
+
+						if moduleHash != testEnv.HelloWorldWasmSha256 {
+							return fmt.Errorf("Wasm hash not set")
+						}
+					}
+
+					if !found {
+						return fmt.Errorf("Nope")
+					}
+
+					return nil
+
+				},
+				Config: VariablesConfig + `
+resource "ic_canister" "test" {}
+`,
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
 /*
 	Check that the update call to the canister with the given resource name returns a string with
 
@@ -173,6 +231,48 @@ func checkCanisterReplyString(s *terraform.State, resourceName string, methodNam
 	}
 
 	return nil
+}
+
+func createCanisterFromWasmPath(wasmFilePath string) (string, error) {
+	config, err := LocalhostConfig()
+	if err != nil {
+		return "", fmt.Errorf("Could not get config")
+	}
+
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, config)
+	if err != nil {
+		return "", fmt.Errorf("Could not create agent: %w", err)
+	}
+
+	createCanisterArgs := icMgmt.ProvisionalCreateCanisterWithCyclesArgs{}
+	res, err := agent.ProvisionalCreateCanisterWithCycles(createCanisterArgs)
+	if err != nil {
+		return "", fmt.Errorf("Could not create canister: %w", err)
+	}
+
+	wasmModule, err := os.ReadFile(wasmFilePath)
+	if err != nil {
+		return "", fmt.Errorf("Could not read wasm module: %w", err)
+	}
+	argRaw := []byte{}
+
+	canisterId := res.CanisterId
+	installMode := CanisterInstallModeInstall()
+
+	installCodeArgs := icMgmt.InstallCodeArgs{
+		Mode:       installMode,
+		CanisterId: canisterId,
+		WasmModule: wasmModule,
+		Arg:        argRaw,
+	}
+
+	err = agent.InstallCode(installCodeArgs)
+	if err != nil {
+		return "", fmt.Errorf("Could not install code: %w", err)
+	}
+
+	return canisterId.Encode(), nil
+
 }
 
 /* Check that the module has of the given canister matches the (hex-encoded) expected value. */

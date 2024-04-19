@@ -4,6 +4,8 @@
 package provider
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path"
@@ -45,9 +47,11 @@ func TestAccExamples(t *testing.T) {
 
 /* Struct carrying test-related data. */
 type TestEnv struct {
-	PemPath         string
-	Identity        identity.Identity
-	ConfigVariables map[string]config.Variable
+	PemPath              string
+	Identity             identity.Identity
+	ConfigVariables      map[string]config.Variable
+	HelloWorldWasmPath   string
+	HelloWorldWasmSha256 string
 }
 
 // Creates a new test env containing data used in tests.
@@ -69,10 +73,19 @@ func NewTestEnv(t *testing.T) TestEnv {
 	providerController := id.Sender().Encode()
 	configVariables["provider_controller"] = config.StringVariable(providerController)
 
+	wasmModule, err := os.ReadFile(helloWorldWasm)
+	if err != nil {
+		t.Fatalf("Could not read wasm module: %s", err.Error())
+	}
+
+	wasmSha256Raw := sha256.Sum256(wasmModule)
+	wasmSha256 := hex.EncodeToString(wasmSha256Raw[:])
 	return TestEnv{
-		PemPath:         pemPath,
-		Identity:        id,
-		ConfigVariables: configVariables,
+		PemPath:              pemPath,
+		Identity:             id,
+		ConfigVariables:      configVariables,
+		HelloWorldWasmPath:   helloWorldWasm,
+		HelloWorldWasmSha256: wasmSha256,
 	}
 }
 
