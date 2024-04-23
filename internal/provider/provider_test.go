@@ -33,12 +33,18 @@ func TestAccExamples(t *testing.T) {
 
 	testEnv := NewTestEnv(t)
 
+	examplesResourcesIcCanister, err := os.ReadFile(path.Join(GetRepoRoot(t), "examples", "resources", "ic_canister", "resource.tf"))
+
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				ConfigDirectory: config.StaticDirectory(path.Join(GetRepoRoot(t), "examples", "resources", "ic_canister")),
+				Config:          ProviderConfig + VariablesConfig + string(examplesResourcesIcCanister),
 			},
 			// Delete testing automatically occurs in TestCase
 		},
@@ -97,6 +103,13 @@ variable "hello_world_wasm" {
 
 variable "provider_controller" {
     type = string
+}
+`
+
+// Provider config with local replica.
+var ProviderConfig = `
+provider "ic" {
+    endpoint = "http://localhost:4943"
 }
 `
 

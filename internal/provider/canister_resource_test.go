@@ -17,6 +17,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
+func LocalhostConfig() (agent.Config, error) {
+	return EndpointConfig("http://localhost:4943")
+}
+
 func TestAccCanisterResource(t *testing.T) {
 
 	testEnv := NewTestEnv(t)
@@ -52,7 +56,7 @@ func TestAccCanisterResource(t *testing.T) {
 			// Create an empty canister
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config:          VariablesConfig + helloWorldWithArg("", false),
+				Config:          ProviderConfig + VariablesConfig + helloWorldWithArg("", false),
 				Check: func(s *terraform.State) error {
 					return checkCanisterModuleHash(s, "ic_canister.test", "")
 				},
@@ -60,7 +64,7 @@ func TestAccCanisterResource(t *testing.T) {
 			// Install Wasm + play with args
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config:          VariablesConfig + helloWorldWithArg("Salut", true),
+				Config:          ProviderConfig + VariablesConfig + helloWorldWithArg("Salut", true),
 				Check: func(s *terraform.State) error {
 					expected := fmt.Sprintf("Salut, %s!", greeted)
 					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
@@ -68,7 +72,7 @@ func TestAccCanisterResource(t *testing.T) {
 			},
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config:          VariablesConfig + helloWorldWithArg("Hello", true),
+				Config:          ProviderConfig + VariablesConfig + helloWorldWithArg("Hello", true),
 				Check: func(s *terraform.State) error {
 					expected := fmt.Sprintf("Hello, %s!", greeted)
 					return checkCanisterReplyString(s, "ic_canister.test", "hello", []any{greeted}, expected)
@@ -77,7 +81,7 @@ func TestAccCanisterResource(t *testing.T) {
 			// Uninstall Wasm
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config:          VariablesConfig + helloWorldWithArg("", false),
+				Config:          ProviderConfig + VariablesConfig + helloWorldWithArg("", false),
 				Check: func(s *terraform.State) error {
 					return checkCanisterModuleHash(s, "ic_canister.test", "")
 				},
@@ -96,7 +100,7 @@ func TestAccCanisterResourceMany(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config: VariablesConfig + `
+				Config: ProviderConfig + VariablesConfig + `
 resource "ic_canister" "test" {
             count = 10
             arg = "Hello-${count.index}"
@@ -119,7 +123,7 @@ func TestAccCanisterResourceEmpty(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				ConfigVariables: testEnv.ConfigVariables,
-				Config: VariablesConfig + `
+				Config: ProviderConfig + VariablesConfig + `
 resource "ic_canister" "test" {}
 `,
 				/* Check that a canister with no configuration is initialized with the provider's own principal */
@@ -179,7 +183,7 @@ func TestAccCanisterResourceImport(t *testing.T) {
 					return nil
 
 				},
-				Config: VariablesConfig + `
+				Config: ProviderConfig + VariablesConfig + `
 resource "ic_canister" "test" {}
 `,
 			},

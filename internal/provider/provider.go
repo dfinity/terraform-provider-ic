@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/aviate-labs/agent-go"
@@ -24,6 +25,9 @@ import (
 var _ provider.Provider = &IcProvider{}
 var _ provider.ProviderWithFunctions = &IcProvider{}
 
+// icp-api is the default api for the Internet Computer.
+var icpApi, _ = url.Parse("https://icp-api.io/")
+
 // IcProvider defines the provider implementation.
 type IcProvider struct {
 	// version is set to the provider version on release, "dev" when the
@@ -33,9 +37,19 @@ type IcProvider struct {
 }
 
 // IcProviderModel describes the provider data model.
-type IcProviderModel struct{}
+type IcProviderModel struct {
+	Endpoint types.String `tfsdk:"endpoint"`
+}
 
-func LocalhostConfig() (agent.Config, error) {
+func (p IcProviderModel) InferConfig() (agent.Config, error) {
+	if p.Endpoint.IsUnknown() || p.Endpoint.IsNull() {
+		return MainnetConfig()
+	} else {
+		return EndpointConfig(p.Endpoint.ValueString())
+	}
+}
+
+func EndpointConfig(endpoint string) (agent.Config, error) {
 
 	// If IC_PEM_IDENTITY_PATH is provided, read the file as the identity
 	pemPath := os.Getenv("IC_PEM_IDENTITY_PATH")
@@ -58,9 +72,41 @@ func LocalhostConfig() (agent.Config, error) {
 		}
 	}
 
-	u, _ := url.Parse("http://localhost:4943")
+	u, _ := url.Parse(endpoint)
 	config = agent.Config{
 		ClientConfig: &agent.ClientConfig{Host: u},
+		FetchRootKey: true,
+		Identity:     id,
+	}
+
+	return config, nil
+}
+
+func MainnetConfig() (agent.Config, error) {
+
+	// If IC_PEM_IDENTITY_PATH is provided, read the file as the identity
+	pemPath := os.Getenv("IC_PEM_IDENTITY_PATH")
+
+	var id identity.Identity
+	var config agent.Config
+
+	if len(pemPath) > 0 {
+
+		data, err := os.ReadFile(pemPath)
+
+		if err != nil {
+			return config, err
+		}
+
+		id, err = NewIdentityFromPEM(data)
+
+		if err != nil {
+			return config, err
+		}
+	}
+
+	config = agent.Config{
+		ClientConfig: &agent.ClientConfig{Host: icpApi},
 		FetchRootKey: true,
 		Identity:     id,
 	}
@@ -75,7 +121,12 @@ func (p *IcProvider) Metadata(ctx context.Context, req provider.MetadataRequest,
 
 func (p *IcProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Attributes: map[string]schema.Attribute{},
+		Attributes: map[string]schema.Attribute{
+			"endpoint": schema.StringAttribute{
+				MarkdownDescription: "The endpoint to use, defaults to icp-api.io (mainnet).",
+				Optional:            true,
+			},
+		},
 	}
 }
 
@@ -85,7 +136,7 @@ func (p *IcProvider) Configure(ctx context.Context, req provider.ConfigureReques
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
-	config, err := LocalhostConfig()
+	config, err := data.InferConfig()
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Could not set up IC agent",
