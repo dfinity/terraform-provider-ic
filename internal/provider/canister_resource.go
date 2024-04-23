@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -24,7 +25,9 @@ import (
 	"github.com/aviate-labs/agent-go"
 	"github.com/aviate-labs/agent-go/candid/idl"
 	"github.com/aviate-labs/agent-go/ic"
+	cmc "github.com/aviate-labs/agent-go/ic/cmc"
 	icMgmt "github.com/aviate-labs/agent-go/ic/ic"
+	ledger "github.com/aviate-labs/agent-go/ic/icpledger"
 	"github.com/aviate-labs/agent-go/principal"
 )
 
@@ -260,6 +263,116 @@ func (r *CanisterResource) Configure(ctx context.Context, req resource.Configure
 	r.config = config
 }
 
+func createCanisterProvisional(config agent.Config) (principal.Principal, error) {
+
+	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, config)
+	if err != nil {
+		return principal.Principal{}, err
+	}
+
+	createCanisterArgs := icMgmt.ProvisionalCreateCanisterWithCyclesArgs{}
+	res, err := agent.ProvisionalCreateCanisterWithCycles(createCanisterArgs)
+
+	if err != nil {
+		return principal.Principal{}, err
+	}
+
+	return res.CanisterId, nil
+}
+
+var MEMO_CREATE_CANISTER uint64 = 0x41455243
+
+func createCanisterCMC(ctx context.Context, config agent.Config) (principal.Principal, error) {
+
+	ledgerAgent, err := ledger.NewAgent(ic.LEDGER_PRINCIPAL, config)
+	if err != nil {
+		return principal.Principal{}, fmt.Errorf("Could not create ledger agent: %w", err)
+	}
+
+	// Prepare the subaccount to send ICP to
+
+	myController := config.Identity.Sender().Raw
+	subaccount := [32]byte{}
+	subaccount[0] = byte(len(myController))
+
+	for i := 0; i < len(myController); i++ {
+		subaccount[i+1] = myController[i]
+	}
+
+	cmcDestAccount := principal.NewAccountID(ic.CYCLES_MINTING_PRINCIPAL, subaccount)
+
+	// Figure out how much ICP to send by checking the cycles conversion rate on the CMC
+	cmcAgent, err := cmc.NewAgent(ic.CYCLES_MINTING_PRINCIPAL, config)
+	if err != nil {
+		return principal.Principal{}, fmt.Errorf("Could not create CMC agent: %w", err)
+	}
+
+	conversionRate, err := cmcAgent.GetIcpXdrConversionRate()
+	if err != nil {
+		return principal.Principal{}, fmt.Errorf("Could not get cycles conversion rate from CMC: %w", err)
+	}
+
+	if conversionRate == nil {
+		return principal.Principal{}, fmt.Errorf("Got no conversion rate from CMC")
+	}
+
+	// XdrPermyriadPerIcp == price of 1e8s in cycles
+	// => price of cycles in 1e8s = 1 / XdrPermyriadPerIcp
+	nE8s := 1_000_000_000_000 /* 1T cycles (0.1 creation + 0.9 running costs) */ / conversionRate.Data.XdrPermyriadPerIcp
+
+	tflog.Info(ctx, fmt.Sprintf("Creating canister with %d e8s", nE8s))
+
+	transferArgs := ledger.TransferArgs{
+		Amount: ledger.Tokens{E8s: nE8s},
+		Fee:    ledger.Tokens{E8s: 10_000},
+		/* FromSubaccount: default to default (null) subaccount */
+		To:   cmcDestAccount.Bytes(),
+		Memo: MEMO_CREATE_CANISTER,
+	}
+
+	res, err := ledgerAgent.Transfer(transferArgs)
+	if err != nil {
+		return principal.Principal{}, fmt.Errorf("Could not transfer funds to create canister: %w", err)
+	}
+
+	if res.Ok == nil {
+		str, _ := json.Marshal(res.Err)
+		return principal.Principal{}, fmt.Errorf("Error when transferring funds: %s", string(str))
+	}
+
+	blockId := *res.Ok
+
+	notifyCreateCanisterArg := cmc.NotifyCreateCanisterArg{
+		BlockIndex: blockId,
+		Controller: config.Identity.Sender(),
+	}
+
+	resCreate, err := cmcAgent.NotifyCreateCanister(notifyCreateCanisterArg)
+	if err != nil {
+		return principal.Principal{}, fmt.Errorf("Could not create canister on CMC: %w", err)
+	}
+
+	if resCreate.Ok == nil {
+		str, _ := json.Marshal(res.Err)
+		return principal.Principal{}, fmt.Errorf("Error when creating canister: %s", string(str))
+	}
+
+	canisterId := *resCreate.Ok
+
+	return canisterId, nil
+
+}
+
+func (r *CanisterResource) createCanister(ctx context.Context) (principal.Principal, error) {
+	if r.config.ClientConfig.Host.String() == icpApi.String() {
+		// If we're on mainnet, use the CMC to create canisters
+		return createCanisterCMC(ctx, *r.config)
+	} else {
+		// otherwise, assume some test setup and use provisional creation
+		return createCanisterProvisional(*r.config)
+	}
+}
+
 func (r *CanisterResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data CanisterResourceModel
 
@@ -270,21 +383,12 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
-	agent, err := icMgmt.NewAgent(ic.MANAGEMENT_CANISTER_PRINCIPAL, *r.config)
+	canisterId, err := r.createCanister(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", err.Error())
 		return
 	}
 
-	createCanisterArgs := icMgmt.ProvisionalCreateCanisterWithCyclesArgs{}
-	res, err := agent.ProvisionalCreateCanisterWithCycles(createCanisterArgs)
-
-	if err != nil {
-		resp.Diagnostics.AddError("Client Error", "Could not create canister: "+err.Error())
-		return
-	}
-
-	canisterId := res.CanisterId
 	data.Id = types.StringValue(canisterId.Encode())
 	tflog.Info(ctx, "Created canister: "+canisterId.Encode())
 
