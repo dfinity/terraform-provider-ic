@@ -36,7 +36,7 @@ jobs:
 
       - run: |
           PACKAGE_NAME=github.com/dfinity/terraform-provider-ic
-          GOLANG_CROSS_VERSION=v1.19.5
+          GOLANG_CROSS_VERSION=v1.21.5
 
           docker run \
             --rm \

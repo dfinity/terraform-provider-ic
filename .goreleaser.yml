@@ -13,7 +13,6 @@ builds:
     - PKG_CONFIG_PATH=/sysroot/macos/amd64/usr/local/lib/pkgconfig
     - CC=o64-clang
     - CXX=o64-clang++
-  binary: golang-cross
   mod_timestamp: '{{ .CommitTimestamp }}'
   flags:
     - -trimpath
