@@ -37,20 +37,22 @@ jobs:
       - run: |
           PACKAGE_NAME=github.com/dfinity/terraform-provider-ic
           GOLANG_CROSS_VERSION=v1.19.5
-          echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
-          echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
-          echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
-          echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' >> .release-env
+          # echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
+          # echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
+          # echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
+          # echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' >> .release-env
+          # TODO: readd
+          # --env-file .release-env \
+
           docker run \
-          		--rm \
-          		-e CGO_ENABLED=1 \
-          		--env-file .release-env \
-          		-v /var/run/docker.sock:/var/run/docker.sock \
-          		-v `pwd`:/go/src/${PACKAGE_NAME} \
-          		-v `pwd`/sysroot:/sysroot \
-          		-w /go/src/${PACKAGE_NAME} \
-          		ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-                build
+            --rm \
+            -e CGO_ENABLED=1 \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v `pwd`:/go/src/${PACKAGE_NAME} \
+            -v `pwd`/sysroot:/sysroot \
+            -w /go/src/${PACKAGE_NAME} \
+            ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
+            build
 
                 #release --clean
                 #- name: Run GoReleaser
