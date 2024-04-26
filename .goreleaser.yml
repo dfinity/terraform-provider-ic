@@ -9,14 +9,31 @@
 builds:
 - env:
     - CGO_ENABLED=1
+    - PKG_CONFIG_SYSROOT_DIR=/sysroot/macos/amd64
+    - PKG_CONFIG_PATH=/sysroot/macos/amd64/usr/local/lib/pkgconfig
+    - CC=o64-clang
+    - CXX=o64-clang++
+  binary: golang-cross
   mod_timestamp: '{{ .CommitTimestamp }}'
   flags:
     - -trimpath
   ldflags:
-    - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+    - '-s -w -X main.version={{.Version}}'
+  targets:
+    - darwin_amd64
+  binary: '{{ .ProjectName }}_v{{ .Version }}'
+- env:
+    - CGO_ENABLED=1
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  flags:
+    - -trimpath
+  ldflags:
+    - '-s -w -X main.version={{.Version}}'
   targets:
     - linux_amd64
   binary: '{{ .ProjectName }}_v{{ .Version }}'
+
+
 archives:
 - format: zip
   name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'

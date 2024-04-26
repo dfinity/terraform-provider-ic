@@ -33,11 +33,31 @@ jobs:
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8 # v5.0.0
-        with:
-          args: release --clean
-        env:
-          # GitHub sets the GITHUB_TOKEN secret automatically.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+
+      - run: |
+          PACKAGE_NAME=github.com/dfinity/terraform-provider-ic
+          GOLANG_CROSS_VERSION=v1.19.5
+          echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
+          echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
+          echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
+          echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' >> .release-env
+          docker run \
+          		--rm \
+          		-e CGO_ENABLED=1 \
+          		--env-file .release-env \
+          		-v /var/run/docker.sock:/var/run/docker.sock \
+          		-v `pwd`:/go/src/$(PACKAGE_NAME) \
+          		-v `pwd`/sysroot:/sysroot \
+          		-w /go/src/$(PACKAGE_NAME) \
+          		ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
+                build
+
+                #release --clean
+                #- name: Run GoReleaser
+                #  uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8 # v5.0.0
+                #  with:
+                #    args: release --clean
+                #  env:
+                #    # GitHub sets the GITHUB_TOKEN secret automatically.
+                #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                #    GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
