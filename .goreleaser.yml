@@ -22,17 +22,17 @@ builds:
   targets:
     - darwin_amd64
   binary: '{{ .ProjectName }}_v{{ .Version }}'
-- id: terraform-provider-ic-linux
-  env:
-    - CGO_ENABLED=1
-  mod_timestamp: '{{ .CommitTimestamp }}'
-  flags:
-    - -trimpath
-  ldflags:
-    - '-s -w -X main.version={{.Version}}'
-  targets:
-    - linux_amd64
-  binary: '{{ .ProjectName }}_v{{ .Version }}'
+    #- id: terraform-provider-ic-linux
+    #  env:
+    #    - CGO_ENABLED=1
+    #  mod_timestamp: '{{ .CommitTimestamp }}'
+    #  flags:
+    #    - -trimpath
+    #  ldflags:
+    #    - '-s -w -X main.version={{.Version}}'
+    #  targets:
+    #    - linux_amd64
+    #  binary: '{{ .ProjectName }}_v{{ .Version }}'
 
 
 archives:
