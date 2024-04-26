@@ -23,10 +23,10 @@ builds:
   binary: '{{ .ProjectName }}_v{{ .Version }}'
 - id: terraform-provider-ic-linux
   env:
-    - PKG_CONFIG_SYSROOT_DIR=/sysroot/linux/amd64
-    - PKG_CONFIG_PATH=/sysroot/linux/amd64/opt/vc/lib/pkgconfig:/sysroot/linux/amd64/usr/lib/arm-linux-gnueabihf/pkgconfig:/sysroot/linux/amd64/usr/lib/pkgconfig:/sysroot/linux/amd64/usr/local/lib/pkgconfig
-    - CC=x86_64-linux-gnu-gcc
-    - CXX=x86_64-linux-gnu-g++
+    - PKG_CONFIG_SYSROOT_DIR=/sysroot/host
+    - PKG_CONFIG_PATH=/sysroot/host/opt/vc/lib/pkgconfig:/sysroot/host/usr/lib/arm-linux-gnueabihf/pkgconfig:/sysroot/host/usr/lib/pkgconfig:/sysroot/host/usr/local/lib/pkgconfig
+    - CC=gcc
+    - CXX=g++
   mod_timestamp: '{{ .CommitTimestamp }}'
   flags:
     - -trimpath
