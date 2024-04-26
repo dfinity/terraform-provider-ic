@@ -22,11 +22,6 @@ builds:
     - darwin_amd64
   binary: '{{ .ProjectName }}_v{{ .Version }}'
 - id: terraform-provider-ic-linux
-  env:
-    - PKG_CONFIG_SYSROOT_DIR=/sysroot/host
-    - PKG_CONFIG_PATH=/sysroot/host/opt/vc/lib/pkgconfig:/sysroot/host/usr/lib/arm-linux-gnueabihf/pkgconfig:/sysroot/host/usr/lib/pkgconfig:/sysroot/host/usr/local/lib/pkgconfig
-    - CC=gcc
-    - CXX=g++
   mod_timestamp: '{{ .CommitTimestamp }}'
   flags:
     - -trimpath
