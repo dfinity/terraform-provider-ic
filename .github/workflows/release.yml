@@ -30,6 +30,7 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
 
+            # TODO: use env: ... and printenv >> .release-env
       - run: |
           PACKAGE_NAME=github.com/dfinity/terraform-provider-ic
           GOLANG_CROSS_VERSION=v1.21.5
@@ -39,6 +40,8 @@ jobs:
           echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
           echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' | sed 's/$/\\n/' file | tr -d '\n' >> .release-env
           echo 'CGO_ENABLED=1' >> .release-env
+
+          echo .release-env >> .git/info/exclude
 
           docker run \
             --rm \
