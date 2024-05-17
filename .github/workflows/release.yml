@@ -23,12 +23,12 @@ jobs:
         with:
           # Allow goreleaser to access older tag information.
           fetch-depth: 0
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@01dd5d3ca463c7f10f7f4f7b4f177225ac661ee4 # v6.1.0
-        id: import_gpg
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.PASSPHRASE }}
+            #- name: Import GPG key
+            #  uses: crazy-max/ghaction-import-gpg@01dd5d3ca463c7f10f7f4f7b4f177225ac661ee4 # v6.1.0
+            #  id: import_gpg
+            #  with:
+            #    gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+            #    passphrase: ${{ secrets.PASSPHRASE }}
 
       - run: |
           PACKAGE_NAME=github.com/dfinity/terraform-provider-ic
@@ -38,11 +38,12 @@ jobs:
             --rm \
             --env CGO_ENABLED=1 \
             --env "GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}" \
-            --env "GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}" \
+            --env "GPG_FINGERPRINT=221E5D7D7DBD1B22EB20CE6808101B07224D1EBB" \
             --env "PASSPHRASE=${{secrets.PASSPHRASE}}" \
             --env "GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}" \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             --volume `pwd`:/go/src/${PACKAGE_NAME} \
             --workdir /go/src/${PACKAGE_NAME} \
+            --entrypoint /bin/bash \
             ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-            release --clean
+            -c 'echo -e "$GPG_PRIVATE_KEY" | gpg --batch --import --passphrase "$PASSPHRASE" && goreleaser release --clean --skip=publish'
