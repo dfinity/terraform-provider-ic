@@ -38,13 +38,14 @@ jobs:
           echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
           echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
           echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
-          echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' | sed 's/$/\\n/' | tr -d '\n' >> .release-env
-          echo 'CGO_ENABLED=1' >> .release-env
+          #echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' | sed 's/$/\\n/' | tr -d '\n' >> .release-env
+          #echo 'CGO_ENABLED=1' >> .release-env
 
           echo .release-env >> .git/info/exclude
 
           docker run \
             --rm \
+            --env CGO_ENABLED=1 \
             --env-file .release-env \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             --volume `pwd`:/go/src/${PACKAGE_NAME} \
