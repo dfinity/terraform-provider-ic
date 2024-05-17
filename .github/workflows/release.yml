@@ -38,7 +38,7 @@ jobs:
           echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
           echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
           echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
-          echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' | sed 's/$/\\n/' file | tr -d '\n' >> .release-env
+          echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' | sed 's/$/\\n/' | tr -d '\n' >> .release-env
           echo 'CGO_ENABLED=1' >> .release-env
 
           echo .release-env >> .git/info/exclude
