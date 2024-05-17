@@ -50,4 +50,9 @@ jobs:
             --volume `pwd`:/go/src/${PACKAGE_NAME} \
             --workdir /go/src/${PACKAGE_NAME} \
             ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-            release --clean
+            build
+
+
+            #
+            #
+            #release --clean
