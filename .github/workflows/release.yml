@@ -1,23 +1,5 @@
 # Copied from https://github.com/hashicorp/terraform-provider-scaffolding-framework
 
-
-# echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
-# echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
-# echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
-# echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' >> .release-env
-# TODO: readd
-# --env-file .release-env \
-#      release --clean
-#
-#      - name: Run GoReleaser
-#        uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8 # v5.0.0
-#        with:
-#          args: release --clean
-#        env:
-#          # GitHub sets the GITHUB_TOKEN secret automatically.
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
-
 # Terraform Provider release workflow.
 name: Release
 
@@ -41,10 +23,6 @@ jobs:
         with:
           # Allow goreleaser to access older tag information.
           fetch-depth: 0
-            #      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
-            #        with:
-            #          go-version-file: 'go.mod'
-            #          cache: true
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@01dd5d3ca463c7f10f7f4f7b4f177225ac661ee4 # v6.1.0
         id: import_gpg
@@ -56,11 +34,17 @@ jobs:
           PACKAGE_NAME=github.com/dfinity/terraform-provider-ic
           GOLANG_CROSS_VERSION=v1.21.5
 
+          echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
+          echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
+          echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
+          echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' >> .release-env
+          echo 'CGO_ENABLED=1' >> .release-env
+
           docker run \
             --rm \
-            --env CGO_ENABLED=1 \
+            --env-file .release-env \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             --volume `pwd`:/go/src/${PACKAGE_NAME} \
             --workdir /go/src/${PACKAGE_NAME} \
             ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-            build
+            release --clean
