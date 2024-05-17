@@ -1,5 +1,6 @@
 # Copied from https://github.com/hashicorp/terraform-provider-scaffolding-framework
 # with changes:
+#   TODO
 #   - removed examples "before hooks"
 #   - only build for linux-amd64
 #   - enable CGO
@@ -7,10 +8,9 @@
 # Visit https://goreleaser.com for documentation on how to customize this
 # behavior.
 builds:
-- id: terraform-provider-ic-darwin
+# darwin builds use osxcross (/usr/local/osxcross)
+- id: terraform-provider-ic-darwin_amd64
   env:
-    - PKG_CONFIG_SYSROOT_DIR=/sysroot/macos/amd64
-    - PKG_CONFIG_PATH=/sysroot/macos/amd64/usr/local/lib/pkgconfig
     - CC=o64-clang
     - CXX=o64-clang++
   mod_timestamp: '{{ .CommitTimestamp }}'
@@ -21,7 +21,20 @@ builds:
   targets:
     - darwin_amd64
   binary: '{{ .ProjectName }}_v{{ .Version }}'
-- id: terraform-provider-ic-linux
+- id: terraform-provider-ic-darwin_arm64
+  env:
+    - CC=oa64-clang
+    - CXX=oa64-clang++
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  flags:
+    - -trimpath
+  ldflags:
+    - '-s -w -X main.version={{.Version}}'
+  targets:
+    - darwin_arm64
+  binary: '{{ .ProjectName }}_v{{ .Version }}'
+
+- id: terraform-provider-ic-linux_amd64
   mod_timestamp: '{{ .CommitTimestamp }}'
   flags:
     - -trimpath
@@ -44,7 +57,7 @@ checksum:
 signs:
   - artifacts: checksum
     args:
-      # if you are using this in a GitHub action or some other automated pipeline, you 
+      # if you are using this in a GitHub action or some other automated pipeline, you
       # need to pass the batch flag to indicate its not interactive.
       - "--batch"
       - "--local-user"

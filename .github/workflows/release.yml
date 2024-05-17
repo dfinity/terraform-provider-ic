@@ -58,12 +58,9 @@ jobs:
 
           docker run \
             --rm \
-            -e CGO_ENABLED=1 \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v `pwd`:/go/src/${PACKAGE_NAME} \
-            -v /:/sysroot/host \
-            -w /go/src/${PACKAGE_NAME} \
+            --env CGO_ENABLED=1 \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume `pwd`:/go/src/${PACKAGE_NAME} \
+            --workdir /go/src/${PACKAGE_NAME} \
             ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
             build
-
-
