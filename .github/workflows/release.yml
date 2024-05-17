@@ -37,7 +37,7 @@ jobs:
           echo 'GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}' >> .release-env
           echo 'GPG_FINGERPRINT=${{steps.import_gpg.outputs.fingerprint}}' >> .release-env
           echo 'PASSPHRASE=${{secrets.PASSPHRASE}}' >> .release-env
-          echo 'GPG_PRIVATE_KEY=${{secrets.GPG_PRIVATE_KEY}}' >> .release-env
+          echo 'GPG_PRIVATE_KEY=${{join(secrets.GPG_PRIVATE_KEY, '\n')}}' >> .release-env
           echo 'CGO_ENABLED=1' >> .release-env
 
           docker run \
