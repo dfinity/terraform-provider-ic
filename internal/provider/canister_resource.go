@@ -569,7 +569,11 @@ func CanisterInstallModeInstall() icMgmt.CanisterInstallMode {
 func CanisterInstallModeUpgrade() icMgmt.CanisterInstallMode {
 	skipPreUpgrade := false
 	update := struct {
-		SkipPreUpgrade *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
+		SkipPreUpgrade        *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
+		WasmMemoryPersistence *struct {
+			Keep    *idl.Null `ic:"keep,variant"`
+			Replace *idl.Null `ic:"replace,variant"`
+		} `ic:"wasm_memory_persistence,omitempty" json:"wasm_memory_persistence,omitempty"`
 	}{SkipPreUpgrade: &skipPreUpgrade}
 	ref := &update
 	return icMgmt.CanisterInstallMode{

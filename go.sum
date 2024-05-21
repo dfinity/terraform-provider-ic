@@ -19,6 +19,8 @@ github.com/apparentlymart/go-textseg/v15 v15.0.0 h1:uYvfpb3DyLSCGWnctWKGj857c6ew
 github.com/apparentlymart/go-textseg/v15 v15.0.0/go.mod h1:K8XmNZdhEBkdlyDdvbmmsvpAG721bKi0joRfFdHIWJ4=
 github.com/armon/go-radix v1.0.0 h1:F4z6KzEeeQIMeLFa97iZU6vupzoecKdU5TX24SNppXI=
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
+github.com/aviate-labs/agent-go v0.4.4 h1:PCekob2iJcbB4a0ZPwkxiK0/xCq14AIfFLMQdZPJXS4=
+github.com/aviate-labs/agent-go v0.4.4/go.mod h1:uodw1LlLrP5A5XxXaNOE39iHYb6IGDqnVXEvwiG+YiM=
 github.com/aviate-labs/leb128 v0.3.0 h1:s9htRv3OYk8nuHqJu9PiVFJxv1jIUTIcpEeiURa91uQ=
 github.com/aviate-labs/leb128 v0.3.0/go.mod h1:GclhBOjhIKmcDlgHKhj0AEZollzERfZUbcRUKiQVqgY=
 github.com/aviate-labs/secp256k1 v0.0.0-5e6736a h1:aQkG/D+l8Y7tr809l8pN+KebH2jzacWReSFQmeEKFgM=
@@ -166,8 +168,6 @@ github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RR
 github.com/mitchellh/reflectwalk v1.0.0/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
 github.com/mitchellh/reflectwalk v1.0.2 h1:G2LzWKi524PWgd3mLHV8Y5k7s6XUvT0Gef6zxSIeXaQ=
 github.com/mitchellh/reflectwalk v1.0.2/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
-github.com/nmattia/agent-go v0.0.0-20240423131254-06c1d4a0ff7e h1:S+w25UW3mfw02OSJQOYwqcWkHiXj9TFfe3ueHyOXHpo=
-github.com/nmattia/agent-go v0.0.0-20240423131254-06c1d4a0ff7e/go.mod h1:uodw1LlLrP5A5XxXaNOE39iHYb6IGDqnVXEvwiG+YiM=
 github.com/oklog/run v1.1.0 h1:GEenZ1cK0+q0+wsJew9qUg/DyD8k3JzYsZAi5gYi2mA=
 github.com/oklog/run v1.1.0/go.mod h1:sVPdnTZT1zYwAJeCMu2Th4T21pA3FPOQRfWjQlk7DVU=
 github.com/pjbgf/sha1cd v0.3.0 h1:4D5XXmUUBUl/xQ6IjCkEAbqXskkq/4O7LmGn0AqMDs4=
