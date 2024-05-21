@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -77,6 +78,9 @@ func EndpointConfig(endpoint string) (agent.Config, error) {
 		ClientConfig: &agent.ClientConfig{Host: u},
 		FetchRootKey: true,
 		Identity:     id,
+		// agent-go (v0.4.4) defaults to 10 seconds which is too short for the CMC to create
+		// canisters
+		PollTimeout: 60 * time.Second,
 	}
 
 	return config, nil
@@ -109,6 +113,9 @@ func MainnetConfig() (agent.Config, error) {
 		ClientConfig: &agent.ClientConfig{Host: icpApi},
 		FetchRootKey: true,
 		Identity:     id,
+		// agent-go (v0.4.4) defaults to 10 seconds which is too short for the CMC to create
+		// canisters
+		PollTimeout: 60 * time.Second,
 	}
 
 	return config, nil
