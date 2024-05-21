@@ -1,0 +1,64 @@
+# Adapted from https://github.com/hashicorp/terraform-provider-scaffolding-framework
+
+# Terraform Provider release workflow.
+name: Release
+
+# This GitHub action creates a release. It publishes the release when a tag that matches the pattern
+# "v*" (e.g. v0.1.0) is created.
+on:
+  push:
+
+# Releases need permissions to read and write the repository contents.
+# GitHub considers creating releases and uploading assets as writing contents.
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          # Allow goreleaser to access older tag information.
+          fetch-depth: 0
+
+      - name: Workaround Git Security Warning
+        run: |
+          # https://github.com/goreleaser/goreleaser-cross/issues/29#issuecomment-1438886471
+          # Workaround a bug in github actions:
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Create Release
+        env:
+          GPG_PRIVATE_KEY_CONTENT: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          PACKAGE_NAME="github.com/$GITHUB_REPOSITORY"
+          GOLANG_CROSS_VERSION=v1.22.3
+
+          GPG_PRIVATE_KEY=$(mktemp)
+          printenv GPG_PRIVATE_KEY_CONTENT > "$GPG_PRIVATE_KEY"
+
+          # We need to specify a few things:
+          #  * CGO_ENABLED=1: agent-go uses a C library for BLS (herumi/bls) which means we need
+          #     CGO. This is also the reason we run goreleaser inside docker (goreleaser cross
+          #     compilation is not straightforward when CGO is enabled)
+          #  * GPG_PRIVATE_KEY: we mount the private key at /secrets/key.gpg, which is picked up
+          #     by the goreleaser-cross image. The PASSPHRASE for that key is also specified as
+          #     an environment variable (needed for signing)
+          #  * when not building a tag starting with 'v' (e.g. v0.1.0, i.e. when not a release),
+          #     we specify '--snapshot' to skip publishing
+          #  * GITHUB_TOKEN: needed for publishing the releases
+
+          docker run \
+            --rm \
+            --env CGO_ENABLED=1 \
+            --env "GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}" \
+            --env "PASSPHRASE=${{secrets.PASSPHRASE}}" \
+            --volume "$GPG_PRIVATE_KEY":/secrets/key.gpg \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume `pwd`:/go/src/${PACKAGE_NAME} \
+            --workdir /go/src/${PACKAGE_NAME} \
+            ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
+            release ${{ !startsWith(github.ref, 'refs/tags/v') && '--snapshot'}}
+
+          rm "$GPG_PRIVATE_KEY"
