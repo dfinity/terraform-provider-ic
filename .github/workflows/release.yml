@@ -45,4 +45,4 @@ jobs:
             --workdir /go/src/${PACKAGE_NAME} \
             --entrypoint /bin/bash \
             ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-            -c 'echo -e "$GPG_PRIVATE_KEY" | gpg --batch --import --passphrase "$PASSPHRASE" && /entrypoint.sh release --clean --skip=publish'
+            -c 'echo -e "$GPG_PRIVATE_KEY" | gpg --batch --import --passphrase "$PASSPHRASE" && /entrypoint.sh release --clean'
