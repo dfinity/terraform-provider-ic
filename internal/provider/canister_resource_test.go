@@ -48,8 +48,8 @@ func TestAccCanisterResource(t *testing.T) {
 
 	greeted := "terraform"
 
-	/* We initialize the hello world canister with a greeting, and then call the `hello` method
-	 * to make sure the specified greeting is used (i.e. ensure that the args are set) */
+	// We initialize the hello world canister with a greeting, and then call the `hello` method
+	// to make sure the specified greeting is used (i.e. ensure that the args are set)
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -126,7 +126,7 @@ func TestAccCanisterResourceEmpty(t *testing.T) {
 				Config: ProviderConfig + VariablesConfig + `
 resource "ic_canister" "test" {}
 `,
-				/* Check that a canister with no configuration is initialized with the provider's own principal */
+				// Check that a canister with no configuration is initialized with the provider's own principal
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("ic_canister.test", "controllers.#", "1"),
 					resource.TestCheckResourceAttr("ic_canister.test", "controllers.0", testEnv.Identity.Sender().Encode()),
@@ -192,11 +192,9 @@ resource "ic_canister" "test" {}
 	})
 }
 
-/*
-	Check that the update call to the canister with the given resource name returns a string with
-
-the expected value.
-*/
+//	Check that the update call to the canister with the given resource name returns a string with
+//
+// the expected value.
 func checkCanisterReplyString(s *terraform.State, resourceName string, methodName string, args []any, expected string) error {
 	rs, ok := s.RootModule().Resources[resourceName]
 	if !ok {
@@ -279,7 +277,7 @@ func createCanisterFromWasmPath(wasmFilePath string) (string, error) {
 
 }
 
-/* Check that the module has of the given canister matches the (hex-encoded) expected value. */
+// Check that the module has of the given canister matches the (hex-encoded) expected value.
 func checkCanisterModuleHash(s *terraform.State, resourceName string, expected string) error {
 	rs, ok := s.RootModule().Resources[resourceName]
 	if !ok {

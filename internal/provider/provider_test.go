@@ -51,7 +51,7 @@ func TestAccExamples(t *testing.T) {
 	})
 }
 
-/* Struct carrying test-related data. */
+// Struct carrying test-related data.
 type TestEnv struct {
 	PemPath              string
 	Identity             identity.Identity
@@ -71,11 +71,11 @@ func NewTestEnv(t *testing.T) TestEnv {
 
 	configVariables := map[string]config.Variable{}
 
-	/* The path to the test canister used in the terraforming */
+	// The path to the test canister used in the terraforming
 	helloWorldWasm := GetHelloWorldWasmPath(t)
 	configVariables["hello_world_wasm"] = config.StringVariable(helloWorldWasm)
 
-	/* Use a temporary PEM as identity and inject it into the terraform config */
+	// Use a temporary PEM as identity and inject it into the terraform config
 	providerController := id.Sender().Encode()
 	configVariables["provider_controller"] = config.StringVariable(providerController)
 
@@ -113,7 +113,7 @@ provider "ic" {
 }
 `
 
-/* Creates a PEM file in a temporary directory. */
+// Creates a PEM file in a temporary directory.
 func CreateTestPEM(t *testing.T) (string, identity.Identity) {
 
 	id, err := identity.NewRandomEd25519Identity()
@@ -137,7 +137,7 @@ func CreateTestPEM(t *testing.T) (string, identity.Identity) {
 	return pemPath, id
 }
 
-/* Returns the root of the repo. */
+// Returns the root of the repo.
 func GetRepoRoot(t *testing.T) string {
 
 	cmdOut, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
