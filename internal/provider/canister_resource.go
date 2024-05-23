@@ -46,8 +46,8 @@ type CanisterResource struct {
 	config *agent.Config
 }
 
-func (c *CanisterResource) ProviderPrincipal() string {
-	return c.config.Identity.Sender().Encode()
+func (r *CanisterResource) ProviderPrincipal() string {
+	return r.config.Identity.Sender().Encode()
 }
 
 // CanisterResourceModel describes the resource data model.
@@ -55,20 +55,20 @@ type CanisterResourceModel struct {
 	Id          types.String  `tfsdk:"id"`
 	Controllers types.List    `tfsdk:"controllers"`
 	Arg         types.Dynamic `tfsdk:"arg"`
-	ArgHex      types.String  `tfsdk:"arg_hex"`     /* Hex-represented didc-encoded arguments */
-	WasmFile    types.String  `tfsdk:"wasm_file"`   /* path to Wasm module */
-	WasmSha256  types.String  `tfsdk:"wasm_sha256"` /* base64-encoded Wasm module */
+	ArgHex      types.String  `tfsdk:"arg_hex"`     // Hex-represented didc-encoded arguments
+	WasmFile    types.String  `tfsdk:"wasm_file"`   // path to Wasm module
+	WasmSha256  types.String  `tfsdk:"wasm_sha256"` // base64-encoded Wasm module
 }
 
 func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
 	return []resource.ConfigValidator{
-		/* arg & arg_hex cannot be both set. */
+		// arg & arg_hex cannot be both set.
 		resourcevalidator.Conflicting(
 			path.MatchRoot("arg"),
 			path.MatchRoot("arg_hex"),
 		),
-		/* If wasm_file is set, a sha must be given too. Moreover,
-		   a sha doesn't make sense without a file. */
+		// If wasm_file is set, a sha must be given too. Moreover,
+		// a sha doesn't make sense without a file.
 		resourcevalidator.RequiredTogether(
 			path.MatchRoot("wasm_file"),
 			path.MatchRoot("wasm_sha256"),
@@ -76,8 +76,8 @@ func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.Confi
 	}
 }
 
-/* If the Controllers are Unknown or Null, update them (default) to the currently configured provider
- * principal. After this function has been called, the controllers are not null or unknown. */
+// If the Controllers are Unknown or Null, update them (default) to the currently configured provider
+// principal. After this function has been called, the controllers are not null or unknown.
 func (data *CanisterResourceModel) InferDefaultControllers(ctx context.Context, config *agent.Config) error {
 
 	tflog.Info(ctx, "Inferring controllers")
@@ -136,7 +136,7 @@ func (data *CanisterResourceModel) StringControllers(ctx context.Context, config
 	return controllers, nil
 }
 
-/* Generate a warning if the planned modifications for the canister do not include the controller that is used by terraform. */
+// Generate a warning if the planned modifications for the canister do not include the controller that is used by terraform.
 func (r *CanisterResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 
 	// Here we use a pointer because terraform may pass a null value (e.g. in deletion)
@@ -211,12 +211,11 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 				ElementType:         types.StringType,
 				MarkdownDescription: "Canister controllers. When creating a new canister, defaults to the principal used by the provider.",
 
-				/* the controllers can either be fetched from the replica, or
-				set directly if necessary.
-				Upon canister creation, the following applies to controllers
-				 * not set or null: use the provider's controller as only controller
-				 * empty list: blackhole canister
-				*/
+				// the controllers can either be fetched from the replica, or
+				// set directly if necessary.
+				// Upon canister creation, the following applies to controllers
+				// * not set or null: use the provider's controller as only controller
+				// * empty list: blackhole canister
 				Computed: true,
 				Optional: true,
 			},
@@ -325,7 +324,7 @@ func createCanisterCMC(ctx context.Context, config agent.Config) (principal.Prin
 	transferArgs := ledger.TransferArgs{
 		Amount: ledger.Tokens{E8s: nE8s},
 		Fee:    ledger.Tokens{E8s: 10_000},
-		/* FromSubaccount: default to default (null) subaccount */
+		// FromSubaccount: default to default (null) subaccount
 		To:   cmcDestAccount.Bytes(),
 		Memo: MEMO_CREATE_CANISTER,
 	}
@@ -392,7 +391,7 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 	data.Id = types.StringValue(canisterId.Encode())
 	tflog.Info(ctx, "Created canister: "+canisterId.Encode())
 
-	/* Code install & args */
+	// Code install & args
 
 	argHex, err := data.GetArgHex(ctx)
 	if err != nil {
@@ -421,7 +420,7 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 	// does not support resources that can't be deleted, so this is really best effort:
 	//   * https://github.com/hashicorp/terraform-plugin-testing/issues/85
 
-	/* Controllers */
+	// Controllers
 
 	err = data.InferDefaultControllers(ctx, r.config)
 	if err != nil {
@@ -480,7 +479,7 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 
 	canisterId := data.Id.ValueString()
 
-	/* Controllers */
+	// Controllers
 
 	controllers, err := data.StringControllers(ctx, r.config)
 	if err != nil {
@@ -501,7 +500,7 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
-	/* Code install & args */
+	// Code install & args
 
 	if data.WasmFile.IsNull() {
 		// If there is no wasm, then we uninstall the canister (idempotent)
@@ -582,26 +581,26 @@ func CanisterInstallModeUpgrade() icMgmt.CanisterInstallMode {
 }
 
 // Returns the candid argument, hex-encoded.
-func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
+func (data *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 
 	// If encoded arguments were provided, use that
-	if !m.ArgHex.IsNull() {
-		return m.ArgHex.ValueString(), nil
+	if !data.ArgHex.IsNull() {
+		return data.ArgHex.ValueString(), nil
 	}
 
 	// If no args are set, use the empty bytestring (hex encoding: empty string)
-	if m.Arg.IsNull() {
+	if data.Arg.IsNull() {
 		return "", nil
 	}
 
 	// Otherwise, turn the terraform value into something that makes sense
 	// in the candid world
-	val, err := m.Arg.ToTerraformValue(ctx)
+	val, err := data.Arg.ToTerraformValue(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	var data any
+	var argData any
 	ty := val.Type().String()
 
 	// XXX: We currently only support string
@@ -613,13 +612,13 @@ func (m *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error) {
 			return "", err
 		}
 
-		data = str
+		argData = str
 	default:
-		return "", fmt.Errorf("Cannot candid-encode value %s of type: %s", m.Arg.String(), ty)
+		return "", fmt.Errorf("Cannot candid-encode value %s of type: %s", data.Arg.String(), ty)
 
 	}
 
-	did, err := idl.Marshal([]any{data})
+	did, err := idl.Marshal([]any{argData})
 	if err != nil {
 		return "", err
 	}
@@ -753,7 +752,7 @@ func (r *CanisterResource) Delete(ctx context.Context, req resource.DeleteReques
 
 type CanisterInfo struct {
 	Controllers []string
-	WasmSha256  string /* hex encoded */
+	WasmSha256  string // hex encoded
 }
 
 func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
@@ -833,11 +832,11 @@ func (r *CanisterResource) ReadCanisterInfo(ctx context.Context, canisterId prin
 		return CanisterInfo{}, fmt.Errorf("could not get canister controllers: %w", err)
 	}
 
-	controller_principals := make([]string, len(controllers))
+	controllerPrincipals := make([]string, len(controllers))
 	tflog.Info(ctx, "Decoding controller principals")
 	for i := 0; i < len(controllers); i++ {
-		controller_principals[i] = controllers[i].Encode()
+		controllerPrincipals[i] = controllers[i].Encode()
 	}
 
-	return CanisterInfo{WasmSha256: moduleHashString, Controllers: controller_principals}, nil
+	return CanisterInfo{WasmSha256: moduleHashString, Controllers: controllerPrincipals}, nil
 }
