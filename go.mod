@@ -2,6 +2,10 @@ module terraform-provider-ic
 
 go 1.22.1
 
+// Needed for artifacts compatible with old build platform (bullseye)
+// https://github.com/herumi/bls-go-binary/issues/31
+replace github.com/herumi/bls-go-binary v1.33.0 => github.com/nmattia/bls-go-binary v0.0.0
+
 require (
 	github.com/aviate-labs/agent-go v0.4.4
 	github.com/hashicorp/terraform-plugin-docs v0.18.0
