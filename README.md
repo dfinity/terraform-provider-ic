@@ -1,5 +1,11 @@
 # Terraform Provider for the IC
 
+A [Terraform provider](https://developer.hashicorp.com/terraform/language/providers) for the [Internet Computer](http://internetcomputer.org).
+
+
+> [!CAUTION]
+> `terraform-provider-ic` is under development and highly experimental.
+
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
