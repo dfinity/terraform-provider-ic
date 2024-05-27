@@ -1,3 +1,5 @@
+// Copyright (c) DFINITY Foundation
+
 package provider
 
 import (

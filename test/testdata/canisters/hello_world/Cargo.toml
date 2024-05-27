@@ -1,3 +1,5 @@
+# Copyright (c) DFINITY Foundation
+
 [package]
 name = "hello-world"
 version = "0.1.0"
