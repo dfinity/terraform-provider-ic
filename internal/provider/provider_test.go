@@ -61,7 +61,7 @@ type TestEnv struct {
 
 // Creates a new test env containing data used in tests.
 // NOTE: this sets the IC_PEM_IDENTITY_PATH environment variable to a new identity
-// (which accessible from the TestEnv struct).
+// (which is accessible from the TestEnv struct).
 func NewTestEnv(t *testing.T) TestEnv {
 
 	pemPath, id := CreateTestPEM(t)

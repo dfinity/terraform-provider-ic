@@ -8,7 +8,7 @@ import (
 	"github.com/aviate-labs/agent-go/identity"
 )
 
-// NewIdentityFromPEN reads a PEM file and tries to create an Identity from it.
+// NewIdentityFromPEM reads a PEM file and tries to create an Identity from it.
 func NewIdentityFromPEM(data []byte) (identity.Identity, error) {
 
 	var errs []error

@@ -176,7 +176,7 @@ func TestAccCanisterResourceImport(t *testing.T) {
 					}
 
 					if !found {
-						return fmt.Errorf("Nope")
+						return fmt.Errorf("Canister not found")
 					}
 
 					return nil
@@ -228,7 +228,7 @@ func checkCanisterReplyString(s *terraform.State, resourceName string, methodNam
 	}
 
 	if result != expected {
-		return fmt.Errorf("Mismatches reply: %s != %s", result, expected)
+		return fmt.Errorf("Mismatched reply: %s != %s", result, expected)
 	}
 
 	return nil
