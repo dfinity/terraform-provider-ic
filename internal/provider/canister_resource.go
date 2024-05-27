@@ -652,8 +652,9 @@ func (r *CanisterResource) setCanisterCode(ctx context.Context, canisterId strin
 
 	// Check sha256
 	computed := sha256.Sum256(wasmModule)
-	if wasmSha256 != hex.EncodeToString(computed[:]) {
-		return fmt.Errorf("Sha256 mismatch, expected %s, got %s", wasmSha256, computed)
+	computedStr := hex.EncodeToString(computed[:])
+	if wasmSha256 != computedStr {
+		return fmt.Errorf("Sha256 mismatch, expected %s, got %s", wasmSha256, computedStr)
 	}
 
 	argRaw, err := hex.DecodeString(argHex)
