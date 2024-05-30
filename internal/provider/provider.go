@@ -70,6 +70,8 @@ func EndpointConfig(endpoint string) (agent.Config, error) {
 		if err != nil {
 			return config, err
 		}
+	} else {
+		id = identity.AnonymousIdentity{}
 	}
 
 	u, _ := url.Parse(endpoint)
@@ -85,39 +87,9 @@ func EndpointConfig(endpoint string) (agent.Config, error) {
 	return config, nil
 }
 
+// The configuration using the official (mainnet) IC API.
 func MainnetConfig() (agent.Config, error) {
-
-	// If IC_PEM_IDENTITY_PATH is provided, read the file as the identity
-	pemPath := os.Getenv("IC_PEM_IDENTITY_PATH")
-
-	var id identity.Identity
-	var config agent.Config
-
-	if len(pemPath) > 0 {
-
-		data, err := os.ReadFile(pemPath)
-
-		if err != nil {
-			return config, err
-		}
-
-		id, err = NewIdentityFromPEM(data)
-
-		if err != nil {
-			return config, err
-		}
-	}
-
-	config = agent.Config{
-		ClientConfig: &agent.ClientConfig{Host: icpApi},
-		FetchRootKey: true,
-		Identity:     id,
-		// agent-go (v0.4.4) defaults to 10 seconds which is too short for the CMC to create
-		// canisters
-		PollTimeout: 60 * time.Second,
-	}
-
-	return config, nil
+	return EndpointConfig(icpApi.String())
 }
 
 func (p *IcProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
