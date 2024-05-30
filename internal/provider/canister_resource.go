@@ -34,6 +34,7 @@ import (
 var _ resource.Resource = &CanisterResource{}
 var _ resource.ResourceWithImportState = &CanisterResource{}
 var _ resource.ResourceWithConfigValidators = &CanisterResource{}
+var _ resource.ResourceWithValidateConfig = &CanisterResource{}
 var _ resource.ResourceWithModifyPlan = &CanisterResource{}
 
 func NewCanisterResource() resource.Resource {
@@ -66,12 +67,24 @@ func (r CanisterResource) ConfigValidators(ctx context.Context) []resource.Confi
 			path.MatchRoot("arg"),
 			path.MatchRoot("arg_hex"),
 		),
-		// If wasm_file is set, a sha must be given too. Moreover,
-		// a sha doesn't make sense without a file.
-		resourcevalidator.RequiredTogether(
-			path.MatchRoot("wasm_file"),
-			path.MatchRoot("wasm_sha256"),
-		),
+	}
+}
+
+func (r CanisterResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data CanisterResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// If a sha256 is given but no module is given, show a warning
+	if !data.WasmSha256.IsNull() && data.WasmFile.IsNull() {
+		resp.Diagnostics.AddAttributeWarning(
+			path.Root("wasm_sha256"),
+			"Sha256 specified without module",
+			"Expected wasm_sha256 to have a wasm_file specified. "+
+				"The resource may return unexpected results.",
+		)
 	}
 }
 
@@ -234,7 +247,8 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"wasm_sha256": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "Sha256 sum of Wasm module (hex encoded). Required if `wasm_file` is specified.",
+				Computed:            true,
+				MarkdownDescription: "Sha256 sum of Wasm module (hex encoded). Recommended if `wasm_file` is specified.",
 			},
 		},
 	}
@@ -402,7 +416,9 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 	if !data.WasmFile.IsNull() {
 
 		wasmFile := data.WasmFile.ValueString()
-		// If the wasm file is not null, then the sha256 is set (through resourcevalidator)
+
+		// This may be the empty string (if sha256 was not set). `setCanisterCode` handles
+		// it appropriately.
 		wasmSha256 := data.WasmSha256.ValueString()
 
 		// We're creating a new canister, so we always use "install"
@@ -650,11 +666,13 @@ func (r *CanisterResource) setCanisterCode(ctx context.Context, canisterId strin
 		return fmt.Errorf("Could not read wasm module: %w", err)
 	}
 
-	// Check sha256
-	computed := sha256.Sum256(wasmModule)
-	computedStr := hex.EncodeToString(computed[:])
-	if wasmSha256 != computedStr {
-		return fmt.Errorf("Sha256 mismatch, expected %s, got %s", wasmSha256, computedStr)
+	// If a sha is specified, then check that it matches that of the module.
+	if len(wasmSha256) > 0 {
+		computed := sha256.Sum256(wasmModule)
+		computedStr := hex.EncodeToString(computed[:])
+		if wasmSha256 != computedStr {
+			return fmt.Errorf("Sha256 mismatch, expected %s, got %s", wasmSha256, computedStr)
+		}
 	}
 
 	argRaw, err := hex.DecodeString(argHex)
