@@ -11,6 +11,7 @@ import (
 	"github.com/aviate-labs/agent-go"
 	"github.com/aviate-labs/agent-go/ic"
 	icMgmt "github.com/aviate-labs/agent-go/ic/ic"
+	"github.com/aviate-labs/agent-go/identity"
 	"github.com/aviate-labs/agent-go/principal"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -129,6 +130,32 @@ resource "ic_canister" "test" {}
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("ic_canister.test", "controllers.#", "1"),
 					resource.TestCheckResourceAttr("ic_canister.test", "controllers.0", testEnv.Identity.Sender().Encode()),
+				),
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+// Ensure that a canister can be create with the anonymous identity (on a local
+// replica at least).
+func TestAccCanisterResourceAnon(t *testing.T) {
+
+	testEnv := NewTestEnv(t)
+	t.Setenv("IC_PEM_IDENTITY_PATH", "") // Reset the PEM set by NewTestEnv
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				ConfigVariables: testEnv.ConfigVariables,
+				Config: ProviderConfig + VariablesConfig + `
+resource "ic_canister" "test" {}
+`,
+				// Check that a canister with no configuration is initialized with the provider's own principal
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("ic_canister.test", "controllers.#", "1"),
+					resource.TestCheckResourceAttr("ic_canister.test", "controllers.0", identity.AnonymousIdentity{}.Sender().Encode()),
 				),
 			},
 			// Delete testing automatically occurs in TestCase
