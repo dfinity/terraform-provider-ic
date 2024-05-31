@@ -412,14 +412,16 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	doInstallCode := !data.WasmFile.IsNull()
+
+	// This may be the empty string (if sha256 was not set). `setCanisterCode` handles
+	// it appropriately.
+	wasmSha256 := data.WasmSha256.ValueString()
+
 	// If the wasm file is not null, then install the code.
-	if !data.WasmFile.IsNull() {
+	if doInstallCode {
 
 		wasmFile := data.WasmFile.ValueString()
-
-		// This may be the empty string (if sha256 was not set). `setCanisterCode` handles
-		// it appropriately.
-		wasmSha256 := data.WasmSha256.ValueString()
 
 		// We're creating a new canister, so we always use "install"
 		err = r.setCanisterCode(ctx, canisterId.Encode(), argHex, wasmFile, wasmSha256)
@@ -428,6 +430,26 @@ func (r *CanisterResource) Create(ctx context.Context, req resource.CreateReques
 			return
 		}
 
+	}
+
+	canisterInfo, err := r.ReadCanisterInfo(ctx, canisterId)
+	if err != nil {
+		resp.Diagnostics.AddError("Client Error", "Could not read canister info: "+err.Error())
+		return
+	}
+
+	if doInstallCode {
+		// If we installed the code, and wasm_sha256 was set, we expect it to match
+		// that of the newly created canister.
+
+		if len(wasmSha256) > 0 && wasmSha256 != canisterInfo.WasmSha256 {
+			resp.Diagnostics.AddWarning("Client Warning", fmt.Sprintf("Expected Wasm module sha %s does not match canister info sha %s. Please inspect canister", wasmSha256, canisterInfo.WasmSha256))
+		}
+	}
+
+	// If the sha wasn't specified by the user (or technically also if set to the empty string), then we set it here.
+	if len(wasmSha256) == 0 {
+		data.WasmSha256 = types.StringValue(canisterInfo.WasmSha256)
 	}
 
 	// XXX: we set controllers at the very end so that e.g. blackhole code can be installed beforehand
@@ -525,6 +547,9 @@ func (r *CanisterResource) Update(ctx context.Context, req resource.UpdateReques
 			resp.Diagnostics.AddError("Client Error", "Could not uninstall code: "+err.Error())
 			return
 		}
+
+		// Update the value (instead of keeping it potentially "unknown")
+		data.WasmSha256 = types.StringValue("")
 
 	} else {
 		// If wasm is set, then install it with the given args (idempotent)
