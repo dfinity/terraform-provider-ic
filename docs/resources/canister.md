@@ -26,11 +26,11 @@ resource "ic_canister" "hello_world" {
 
 ### Optional
 
-- `arg` (Dynamic) Init & post_upgrade arguments for the canister. Heuristics are used to convert it to candid. If neither `arg` nor `arg_hex` is set, the argument defaults to the empty blob (and not for instance to a Candid `null`).
-- `arg_hex` (String) Hex representation of candid-encoded arguments. If neither `arg` nor `arg_hex` is set, the argument defaults to the empty blob (and not for instance to a Candid `null`).
+- `arg` (Dynamic) Init & post_upgrade arguments for the canister. Heuristics are used to convert it to candid. The Terraform value is automatically candid-encoded using the heurstics describe in the `did_encode` function. You should not call `did_encode` when using `arg`. If neither `arg` nor `arg_hex` is set, the argument defaults to the empty blob (and not for instance to a Candid `null`).
+- `arg_hex` (String) Hex representation of candid-encoded arguments. This is helpful if you generate a (hex) candid-encoded strings using didc or by using `did_encode` directly. If neither `arg` nor `arg_hex` is set, the argument defaults to the empty blob (and not for instance to a Candid `null`).
 - `controllers` (List of String) Canister controllers. When creating a new canister, defaults to the principal used by the provider.
 - `wasm_file` (String) Path to Wasm module to install
-- `wasm_sha256` (String) Sha256 sum of Wasm module (hex encoded). Required if `wasm_file` is specified.
+- `wasm_sha256` (String) Sha256 sum of Wasm module (hex encoded). Recommended if `wasm_file` is specified.
 
 ### Read-Only
 
