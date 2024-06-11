@@ -234,12 +234,12 @@ func (r *CanisterResource) Schema(ctx context.Context, req resource.SchemaReques
 			"arg": schema.DynamicAttribute{
 				Optional: true,
 
-				MarkdownDescription: "Init & post_upgrade arguments for the canister. Heuristics are used to convert it to candid. " + argDefaultDescription,
+				MarkdownDescription: "Init & post_upgrade arguments for the canister. Heuristics are used to convert it to candid. " + "The Terraform value is automatically candid-encoded using the heurstics describe in the `did_encode` function. You should not call `did_encode` when using `arg`. " + argDefaultDescription,
 			},
 			"arg_hex": schema.StringAttribute{
 				Optional: true,
 
-				MarkdownDescription: "Hex representation of candid-encoded arguments. " + argDefaultDescription,
+				MarkdownDescription: "Hex representation of candid-encoded arguments. This is helpful if you generate a (hex) candid-encoded strings using didc or by using `did_encode` directly. " + argDefaultDescription,
 			},
 			"wasm_file": schema.StringAttribute{
 				Optional:            true,
@@ -635,35 +635,22 @@ func (data *CanisterResourceModel) GetArgHex(ctx context.Context) (string, error
 
 	// Otherwise, turn the terraform value into something that makes sense
 	// in the candid world
-	val, err := data.Arg.ToTerraformValue(ctx)
+	tfVal, err := data.Arg.ToTerraformValue(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	var argData any
-	ty := val.Type().String()
-
-	// XXX: We currently only support string
-	switch ty {
-	case "tftypes.String":
-		var str string
-		err = val.As(&str)
-		if err != nil {
-			return "", err
-		}
-
-		argData = str
-	default:
-		return "", fmt.Errorf("Cannot candid-encode value %s of type: %s", data.Arg.String(), ty)
-
-	}
-
-	did, err := idl.Marshal([]any{argData})
+	didValue, err := TFValToCandid(tfVal)
 	if err != nil {
 		return "", err
 	}
 
-	return hex.EncodeToString(did), nil
+	didEncoded, err := idl.Marshal([]any{didValue})
+	if err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(didEncoded), nil
 
 }
 

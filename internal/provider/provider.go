@@ -143,7 +143,17 @@ func (p *IcProvider) DataSources(ctx context.Context) []func() datasource.DataSo
 }
 
 func (p *IcProvider) Functions(ctx context.Context) []func() function.Function {
-	return []func() function.Function{}
+	return []func() function.Function{
+		func() function.Function {
+			return &ArgTextFunction{}
+		},
+		func() function.Function {
+			return &ArgRecordFunction{}
+		},
+		func() function.Function {
+			return &ArgEncodeFunction{}
+		},
+	}
 }
 
 func New(version string) func() provider.Provider {
