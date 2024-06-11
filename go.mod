@@ -29,6 +29,7 @@ require (
 	github.com/aviate-labs/secp256k1 v0.0.0-5e6736a // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
+	github.com/di-wu/parser v0.3.0 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
