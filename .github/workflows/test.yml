@@ -1,6 +1,5 @@
 # Copied from https://github.com/hashicorp/terraform-provider-scaffolding-framework
 # with changes:
-#   * generate step disabled
 #   * use released terraform 1.8.4
 
 # Terraform Provider testing workflow.
@@ -64,7 +63,6 @@ jobs:
           path: test/testdata/canisters/hello_world/hello-world.wasm
 
   generate:
-    if: false # disabled until ready
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1

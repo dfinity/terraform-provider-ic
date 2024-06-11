@@ -10,11 +10,11 @@ import (
 
 const argEncodeSummary = "Encode Terraform values into candid values."
 
-const argEncodeDescription = "The `did_encode` function transforms Terraform values into hex-encoded candid values. It takes a single argument and applies heuristics to generate a candid value. \n" +
+const argEncodeDescription = "The `did_encode` function transforms Terraform values into hex-encoded candid values. It takes a single argument and applies heuristics to generate a candid value.\n" +
 
-	"For primitive values (strings, etc) will be encoded as the equivalent candid type. HCL maps and objects will be encoded as records unless they contain the fields `__didType` or `__didValue`. When those fields are set, `__didValue` is the actual value to be encoded, and `__didType` must be a tag defining the type of the value. These fields however should be treated as implementation details and the various helpers (`did_text`, `did_record`) should be used instead. \n\n" +
+	"For primitive values (strings, etc) will be encoded as the equivalent candid type. HCL maps and objects will be encoded as records unless they contain the fields `__didType` or `__didValue`. When those fields are set, `__didValue` is the actual value to be encoded, and `__didType` must be a tag defining the type of the value. These fields however should be treated as implementation details and the various helpers (`did_text`, `did_record`) should be used instead.\n\n" +
 
-	"Here are some equivalences between HCL values and textual candid value: \n\n" +
+	"Here are some equivalences between HCL values and textual candid value:\n\n" +
 
 	"`" + `"hello"` + "` = `" + `("hello")` + "`" + "\n" +
 	"`" + `{ foo = "bar" }` + "` = `" + `(record { foo = "bar" })` + "`" + "\n"
