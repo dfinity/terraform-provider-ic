@@ -1,4 +1,5 @@
 # Adapted from https://github.com/hashicorp/terraform-provider-scaffolding-framework
+# - make it run on every push, though only perform release on 'v*' tags
 
 # Terraform Provider release workflow.
 name: Release
@@ -17,48 +18,27 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
         with:
           # Allow goreleaser to access older tag information.
           fetch-depth: 0
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@01dd5d3ca463c7f10f7f4f7b4f177225ac661ee4 # v6.1.0
+        id: import_gpg
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
+        with:
+          args: release ${{ !startsWith(github.ref, 'refs/tags/v') && '--snapshot' || ''}}
 
-      - name: Workaround Git Security Warning
-        run: |
-          # https://github.com/goreleaser/goreleaser-cross/issues/29#issuecomment-1438886471
-          # Workaround a bug in github actions:
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Create Release
         env:
-          GPG_PRIVATE_KEY_CONTENT: ${{ secrets.GPG_PRIVATE_KEY }}
-        run: |
-          PACKAGE_NAME="github.com/$GITHUB_REPOSITORY"
-          GOLANG_CROSS_VERSION=v1.22.3
-
-          GPG_PRIVATE_KEY=$(mktemp)
-          printenv GPG_PRIVATE_KEY_CONTENT > "$GPG_PRIVATE_KEY"
-
-          # We need to specify a few things:
-          #  * CGO_ENABLED=1: agent-go uses a C library for BLS (herumi/bls) which means we need
-          #     CGO. This is also the reason we run goreleaser inside docker (goreleaser cross
-          #     compilation is not straightforward when CGO is enabled)
-          #  * GPG_PRIVATE_KEY: we mount the private key at /secrets/key.gpg, which is picked up
-          #     by the goreleaser-cross image. The PASSPHRASE for that key is also specified as
-          #     an environment variable (needed for signing)
-          #  * when not building a tag starting with 'v' (e.g. v0.1.0, i.e. when not a release),
-          #     we specify '--snapshot' to skip publishing
-          #  * GITHUB_TOKEN: needed for publishing the releases
-
-          docker run \
-            --rm \
-            --env CGO_ENABLED=1 \
-            --env "GITHUB_TOKEN=${{secrets.GITHUB_TOKEN}}" \
-            --env "PASSPHRASE=${{secrets.PASSPHRASE}}" \
-            --volume "$GPG_PRIVATE_KEY":/secrets/key.gpg \
-            --volume /var/run/docker.sock:/var/run/docker.sock \
-            --volume `pwd`:/go/src/${PACKAGE_NAME} \
-            --workdir /go/src/${PACKAGE_NAME} \
-            ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-            release ${{ !startsWith(github.ref, 'refs/tags/v') && '--snapshot' || ''}}
-
-          rm "$GPG_PRIVATE_KEY"
+          # GitHub sets the GITHUB_TOKEN secret automatically.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}

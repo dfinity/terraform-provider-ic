@@ -35,7 +35,7 @@ func TestAccExamples(t *testing.T) {
 	examplesResourcesIcCanister, err := os.ReadFile(path.Join(GetRepoRoot(t), "examples", "resources", "ic_canister", "resource.tf"))
 
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 
 	resource.Test(t, resource.TestCase{
