@@ -2,12 +2,8 @@ module terraform-provider-ic
 
 go 1.22.1
 
-// Needed for artifacts compatible with old build platform (bullseye)
-// https://github.com/herumi/bls-go-binary/issues/31
-replace github.com/herumi/bls-go-binary v1.33.0 => github.com/nmattia/bls-go-binary v0.0.0
-
 require (
-	github.com/aviate-labs/agent-go v0.4.4
+	github.com/aviate-labs/agent-go v0.5.1
 	github.com/hashicorp/terraform-plugin-docs v0.18.0
 	github.com/hashicorp/terraform-plugin-framework v1.7.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.12.0
@@ -28,7 +24,10 @@ require (
 	github.com/aviate-labs/leb128 v0.3.0 // indirect
 	github.com/aviate-labs/secp256k1 v0.0.0-5e6736a // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
+	github.com/bits-and-blooms/bitset v1.7.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
+	github.com/consensys/bavard v0.1.13 // indirect
+	github.com/consensys/gnark-crypto v0.12.2-0.20240215234832-d72fcb379d3e // indirect
 	github.com/di-wu/parser v0.3.0 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
@@ -54,7 +53,6 @@ require (
 	github.com/hashicorp/terraform-registry-address v0.2.3 // indirect
 	github.com/hashicorp/terraform-svchost v0.1.1 // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
-	github.com/herumi/bls-go-binary v1.33.0 // indirect
 	github.com/huandu/xstrings v1.3.3 // indirect
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -65,6 +63,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
+	github.com/mmcloughlin/addchain v0.4.0 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/posener/complete v1.2.3 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect
@@ -87,6 +86,7 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
 	google.golang.org/grpc v1.62.1 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
-	gopkg.in/yaml.v2 v2.3.0 // indirect
+	google.golang.org/protobuf v1.34.1 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
+	rsc.io/tmplfunc v0.0.3 // indirect
 )
