@@ -601,21 +601,26 @@ func (r *CanisterResource) setCanisterEmpty(canisterId string) error {
 
 }
 
-func CanisterInstallModeInstall() icMgmt.CanisterInstallMode {
-	return icMgmt.CanisterInstallMode{Install: &idl.Null{}}
+type CanisterInstallMode struct {
+	Install   *idl.Null "ic:\"install,variant\""
+	Reinstall *idl.Null "ic:\"reinstall,variant\""
+	Upgrade   **struct {
+		SkipPreUpgrade *bool "ic:\"skip_pre_upgrade,omitempty\" json:\"skip_pre_upgrade,omitempty\""
+	} "ic:\"upgrade,variant\""
 }
 
-func CanisterInstallModeUpgrade() icMgmt.CanisterInstallMode {
+func CanisterInstallModeInstall() CanisterInstallMode {
+	return CanisterInstallMode{Install: &idl.Null{}}
+}
+
+func CanisterInstallModeUpgrade() CanisterInstallMode {
 	skipPreUpgrade := false
 	update := struct {
-		SkipPreUpgrade        *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
-		WasmMemoryPersistence *struct {
-			Keep    *idl.Null `ic:"keep,variant"`
-			Replace *idl.Null `ic:"replace,variant"`
-		} `ic:"wasm_memory_persistence,omitempty" json:"wasm_memory_persistence,omitempty"`
+		SkipPreUpgrade *bool `ic:"skip_pre_upgrade,omitempty" json:"skip_pre_upgrade,omitempty"`
 	}{SkipPreUpgrade: &skipPreUpgrade}
+
 	ref := &update
-	return icMgmt.CanisterInstallMode{
+	return CanisterInstallMode{
 		Upgrade: &ref,
 	}
 }
@@ -807,9 +812,9 @@ func (r *CanisterResource) ImportState(ctx context.Context, req resource.ImportS
 		canisterInfo.Controllers)...)
 }
 
-func (r *CanisterResource) InferInstallMode(ctx context.Context, canisterIdS string) (icMgmt.CanisterInstallMode, error) {
+func (r *CanisterResource) InferInstallMode(ctx context.Context, canisterIdS string) (CanisterInstallMode, error) {
 
-	installMode := icMgmt.CanisterInstallMode{}
+	installMode := CanisterInstallMode{}
 
 	canisterId, err := principal.Decode(canisterIdS)
 	if err != nil {
