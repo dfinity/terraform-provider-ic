@@ -25,7 +25,7 @@ require (
 	github.com/aviate-labs/secp256k1 v0.0.0-5e6736a // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/bits-and-blooms/bitset v1.20.0 // indirect
-	github.com/cloudflare/circl v1.3.7 // indirect
+	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/consensys/bavard v0.1.25 // indirect
 	github.com/consensys/gnark-crypto v0.14.0 // indirect
 	github.com/di-wu/parser v0.3.0 // indirect
